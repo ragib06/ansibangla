@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ansibangla"
+version = "2.0.0"
+description = "Convert ANSI Bangla (Bijoy / SutonnyMJ) PDFs and Word documents to Unicode, keeping their formatting: PDF, Word, EPUB and Markdown."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Ragib Ahsan" }]
+requires-python = ">=3.9"
+dependencies = ["pymupdf>=1.24.3"]
+keywords = ["bengali", "bangla", "ansi", "sutonnymj", "bijoy", "unicode", "pdf", "docx", "epub", "converter"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Natural Language :: Bengali",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Text Processing :: Fonts",
+    "Topic :: Text Processing :: Linguistic",
+]
+
+[project.urls]
+Homepage = "https://github.com/ragib06/ansibangla"
+Issues = "https://github.com/ragib06/ansibangla/issues"
+
+[project.scripts]
+ansibangla = "ansibangla.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["ansibangla*"]
+
+[tool.setuptools.package-data]
+ansibangla = ["fonts/*.ttf", "fonts/OFL.txt"]

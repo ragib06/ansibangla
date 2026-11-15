@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# conversion output
+out/
+*_unicode.pdf
+*_unicode.md
+*_unicode.docx
+*_unicode.epub
+*_unicode_images/
+
+# sample books are copyrighted; keep them local
+sample/
+
+# web app
+node_modules/
+.vercel/
+.next/
