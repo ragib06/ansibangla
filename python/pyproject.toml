@@ -31,7 +31,7 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://ansibangla.vercel.app/"
+Homepage = "https://ansibangla.cc/"
 
 [project.scripts]
 ansibangla = "ansibangla.cli:main"

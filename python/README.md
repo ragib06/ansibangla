@@ -51,7 +51,7 @@ pip install ansibangla
 Or as a stand-alone command with [pipx](https://pipx.pypa.io/) or [uv](https://docs.astral.sh/uv/):
 `pipx install ansibangla` or `uv tool install ansibangla`.
 
-No install at all: the web app at <https://ansibangla.vercel.app/> runs the same converter
+No install at all: the web app at <https://ansibangla.cc/> runs the same converter
 in your browser.
 
 For development, from the `python/` folder of a checkout (code changes take effect
