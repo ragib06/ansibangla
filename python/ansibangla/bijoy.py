@@ -249,7 +249,8 @@ def set_latin_keep(words):
 
 
 def _cluster_end(s, i):
-    """s[i] is a consonant; return the index just past its conjunct cluster."""
+    """s[i] is a consonant; return the index just past its conjunct cluster.
+    s is a string or a list of characters."""
     j = i + 1
     if j < len(s) and s[j] == NUKTA:
         j += 1
@@ -263,7 +264,8 @@ def _cluster_end(s, i):
 
 
 def _cluster_start(s, i):
-    """s[i] is the last consonant of a cluster; return the index of its first letter."""
+    """s[i] is the last consonant of a cluster; return the index of its first letter.
+    s is a string or a list of characters."""
     j = i
     if s[j] == NUKTA:
         j -= 1
@@ -290,13 +292,13 @@ def convert(text):
     s = s.replace('অা', 'আ')          # অ + া -> আ
 
     # 1. move pre-base vowel signs (ি ে ৈ) after the consonant cluster they precede
+    #    (on a list, in place: rebuilding the string each time is quadratic in long text)
     out = list(s)
     i = 0
     while i < len(out):
         c = out[i]
         if c in PRE and i + 1 < len(out) and out[i + 1] in CONS:
-            st = ''.join(out)
-            end = _cluster_end(st, i + 1)
+            end = _cluster_end(out, i + 1)
             cluster = out[i + 1:end]
             sign, tail = c, end
             if c == 'ে' and end < len(out) and out[end] == 'া':   # ে + া = ো
@@ -307,17 +309,23 @@ def convert(text):
             i += len(cluster) + 1
             continue
         i += 1
-    s = ''.join(out)
 
-    # 2. move reph in front of the syllable it sits on
-    while REPH in s:
-        i = s.index(REPH)
+    # 2. move reph in front of the syllable it sits on, first to last (nothing before a
+    #    reph changes once it is placed, so each search starts where the last one was)
+    i = 0
+    while True:
+        try:
+            i = out.index(REPH, i)
+        except ValueError:
+            break
         j = i
-        while j - 1 >= 0 and s[j - 1] in SIGNS:
+        while j - 1 >= 0 and out[j - 1] in SIGNS:
             j -= 1
-        if j - 1 >= 0 and (s[j - 1] in CONS or s[j - 1] == NUKTA):
-            j = _cluster_start(s, j - 1)
-        s = s[:j] + 'র্' + s[j:i] + s[i + 1:]
+        if j - 1 >= 0 and (out[j - 1] in CONS or out[j - 1] == NUKTA):
+            j = _cluster_start(out, j - 1)
+        del out[i]
+        out[j:j] = ['র', HAL]
+    s = ''.join(out)
 
     # 3. kar typed before a fola (e.g. Zz¨ = ত্যু), or split from it by a reph
     #    (‡N©¨ = র্ঘ্যে); a vowel sign is never followed by a virama in Unicode

@@ -45,6 +45,19 @@ def test_convert_text_glyph_cases(raw, want):
     assert convert_text(raw) == want
 
 
+def test_convert_text_long_input_is_fast_and_line_independent():
+    """Pasted text can be a whole chapter: conversion must not slow down quadratically
+    (it once rebuilt the string for every vowel sign and reph), and each line converts
+    the same on its own as inside the whole text."""
+    import time
+    lines = ['K‡e mvayi PiYa~wj', 'ivbvNv‡U A‡a©K c¨v‡mÄvi †b‡g †M‡j', 'wbwØ©avq m¤úwK©']
+    text = '\n'.join(lines * 4000)                     # about 200 000 characters
+    start = time.perf_counter()
+    out = convert_text(text)
+    assert time.perf_counter() - start < 5
+    assert out == '\n'.join(convert_text(l) for l in text.split('\n'))
+
+
 def test_danda_after_english_word():
     from ansibangla._common import span_text
     assert span_text(dict(font='TimesNewRomanPSMT', text='(DNA)|')) == '(DNA)।'
