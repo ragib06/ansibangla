@@ -1,0 +1,17 @@
+{
+  "name": "ansibangla-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "pack": "node scripts/pack-python.mjs",
+    "dev": "npm run pack && vite",
+    "build": "npm run pack && tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "fflate": "0.8.3",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.1"
+  }
+}
