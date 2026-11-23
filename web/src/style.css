@@ -226,3 +226,13 @@ body {
 
 .foot { margin-top: 32px; font-size: .85rem; color: var(--muted); }
 .foot p { margin: 4px 0; }
+.foot a { color: inherit; text-underline-offset: 2px; }
+.foot a:hover { color: var(--accent); }
+.foot code {
+  font: .8rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
