@@ -10,8 +10,8 @@ and writes real Unicode Bengali as PDF, Word, EPUB or Markdown, with the layout 
 
 *Bijoy and SutonnyMJ are names of their owners; this project is not affiliated with them.*
 
-You choose the outputs with `-f`/`--formats`: any combination of `pdf`, `docx`, `epub`
-and `md`. Without it you get the same format as the input: a PDF for a PDF, a `.docx` for
+You choose the outputs with `-f`/`--formats`: any combination of `pdf`, `docx`, `epub`,
+`md` and `html`. Without it you get the same format as the input: a PDF for a PDF, a `.docx` for
 a `.docx`.
 
 **Word input.** The `.docx` output is the same document with its SutonnyMJ text in
@@ -30,12 +30,13 @@ The outputs, for PDF or Word input:
 | `<name>_unicode.pdf` | `pdf` | Same page layout in a Unicode Bengali font (Noto Serif Bengali), with pictures and page colour kept. Text is searchable and copyable. |
 | `<name>_unicode.docx` | `docx` | Word document with the source's formatting: page size, margins, page colour, line spacing, justified paragraphs with first-line indents, centred headings, framed pictures, bold and italic, page numbers. One page per source page. Fonts are embedded. |
 | `<name>_unicode.epub` | `epub` | Reflowable EPUB 3 e-book: chapters split at headings, table of contents, justified paragraphs with indents, bold and italic, pictures, and the printed page numbers as a page list. Fonts are embedded. |
+| `<name>_unicode.html` | `html` | The PDF's pages as one self-contained HTML file (fonts and pictures embedded). Open it in a browser and print to PDF; no Chrome install is needed. Print it once the page has finished loading, at 100% scale with no margins or headers. |
 
 ## Requirements
 
 - Python 3.9 or newer
 - [PyMuPDF](https://pymupdf.readthedocs.io/) (installed automatically)
-- Google Chrome or Chromium, **only for PDF output**. Markdown, DOCX and EPUB output need no browser.
+- Google Chrome or Chromium, **only for PDF output**. Markdown, DOCX, EPUB and HTML output need no browser.
 
 ## Install
 
@@ -105,7 +106,7 @@ Options:
 | Option | Default | Meaning |
 |--------|---------|---------|
 | `-o`, `--out-dir` | `.` | Output folder (created if missing). |
-| `-f`, `--formats` | the input's format | Outputs: any of `pdf`, `docx`, `epub`, `md`, separated by spaces or commas, or by repeating `-f`. Without it: `pdf` for PDFs, `docx` for `.docx` files. |
+| `-f`, `--formats` | the input's format | Outputs: any of `pdf`, `docx`, `epub`, `md`, `html`, separated by spaces or commas, or by repeating `-f`. Without it: `pdf` for PDFs, `docx` for `.docx` files. |
 | `--scale` | `0.9` | Font-size factor for the Unicode PDF and DOCX (also for `.docx` input). Lower it if text looks crowded. |
 | `--chrome` | auto | Path to Chrome or Chromium. |
 | `--title` | first heading | Title of the EPUB. |
@@ -133,7 +134,7 @@ convert_text('wbwØ©avq')        # 'নির্দ্বিধায়'
 `convert_pdf(src, out_dir='.', *, stem=None, formats=('pdf',), scale=0.9, font_dir=None, chrome=None, title=None)`
 
 - `stem`: base name for the output files (default: input file name).
-- `formats`: any combination of `'pdf'`, `'docx'`, `'epub'`, `'md'`.
+- `formats`: any combination of `'pdf'`, `'docx'`, `'epub'`, `'md'`, `'html'`.
 - `scale`: font-size factor for the PDF and DOCX.
 - `font_dir`: folder with replacement fonts (default: the bundled Noto Serif Bengali).
 - `chrome`: path to Chrome or Chromium.
@@ -189,9 +190,9 @@ ansibangla/
   mdexport.py     Markdown output
   docxexport.py   Word (.docx) output
   epubexport.py   EPUB 3 e-book output
-  pdfbuild.py     HTML layout + headless Chrome -> PDF output
+  pdfbuild.py     HTML layout -> printable HTML, or headless Chrome -> PDF output
   docxinput.py    Word (.docx) input: SutonnyMJ runs converted in place
-  docxrender.py   PDF and EPUB from a converted Word document
+  docxrender.py   PDF, HTML and EPUB from a converted Word document
   api.py          convert_file / convert_pdf / convert_docx / convert_text
   cli.py          command line
   fonts/          Noto Serif Bengali W94 (OFL), sized to match SutonnyMJ

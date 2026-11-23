@@ -13,6 +13,7 @@ out/
 *_unicode.md
 *_unicode.docx
 *_unicode.epub
+*_unicode.html
 *_unicode_images/
 
 # sample books are copyrighted; keep them local
@@ -22,3 +23,6 @@ sample/
 node_modules/
 .vercel/
 .next/
+
+# built from python/ansibangla by web/scripts/pack-python.mjs
+web/public/ansibangla.zip

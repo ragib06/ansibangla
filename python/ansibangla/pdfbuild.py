@@ -3,9 +3,12 @@
 Body text is rebuilt in runs (consecutive body lines form one justified block). A script
 in the page shrinks each run's font until it takes no more lines than its source did,
 so Unicode's wider glyphs cannot push text into lines placed at their source positions.
-Headless Chrome prints the result.
+Headless Chrome prints the result. The same HTML, with its fonts and pictures embedded,
+is the 'html' output: a page any browser can print to PDF without Chrome being installed.
 """
+import base64
 import html
+import mimetypes
 import os
 import shutil
 import subprocess
@@ -59,9 +62,29 @@ document.querySelectorAll('.p.cont').forEach(function (p) {
 }
 // measure only after the Bengali fonts are loaded, or the fallback font gives wrong line counts
 Promise.all([document.fonts.load('400 12px Bn', '\u0985'), document.fonts.load('700 12px Bn', '\u0985')])
-  .then(function () { return document.fonts.ready; }).then(fitAll, fitAll);
+  .then(function () { return document.fonts.ready; }).then(fitAll, fitAll)
+  .then(function () { document.documentElement.dataset.ready = '1'; });   // safe to print now
 </script>
 """
+
+# a page with no fitting script is ready to print once its fonts are loaded
+READY_SCRIPT = """
+<script>
+document.fonts.ready.then(function () { document.documentElement.dataset.ready = '1'; });
+</script>
+"""
+
+
+def asset_url(path, embed):
+    """URL of a font or picture: a data: URL when embed is true (a page that works on
+    its own anywhere), else a file:// URL (for headless Chrome on this machine)."""
+    if not embed:
+        return 'file://' + os.path.abspath(path)
+    ext = os.path.splitext(path)[1].lower()
+    mime = {'.ttf': 'font/ttf', '.otf': 'font/otf', '.woff2': 'font/woff2'}.get(ext) \
+        or mimetypes.guess_type(path)[0] or 'application/octet-stream'
+    with open(path, 'rb') as fh:
+        return f'data:{mime};base64,' + base64.b64encode(fh.read()).decode('ascii')
 
 
 def find_chrome(explicit=None):
@@ -135,7 +158,7 @@ def _run_html(layout, run, lh):
             + ''.join(items) + '</div>')
 
 
-def _page_html(doc, page, page_no, layout, img_dir):
+def _page_html(doc, page, page_no, layout, img_dir, embed=False):
     lines = read_lines(page)
     # line spacing of the body text: median gap between consecutive body lines
     out, body_ids = [], set()
@@ -169,23 +192,33 @@ def _page_html(doc, page, page_no, layout, img_dir):
             B = PICTURE_FRAME
             out.append(f'<div class="frame" style="left:{x0 - B:.2f}pt;top:{y0 - B:.2f}pt;'
                        f'width:{x1 - x0 + 2 * B:.2f}pt;height:{y1 - y0 + 2 * B:.2f}pt"></div>')
-        out.append(f'<img class="pic" src="file://{os.path.abspath(pic["path"])}" '
+        out.append(f'<img class="pic" src="{asset_url(pic["path"], embed)}" '
                    f'style="left:{x0:.2f}pt;top:{y0:.2f}pt;width:{x1 - x0:.2f}pt;height:{y1 - y0:.2f}pt">')
     return '<section class="page">' + '\n'.join(out) + '</section>'
 
 
 def build_pdf(doc, layout, out_pdf, font_dir, img_dir, chrome=None):
     """Write the Unicode PDF. Returns the output path."""
+    chrome = find_chrome(chrome)
+    return print_html(page_html(doc, layout, font_dir, img_dir), out_pdf, chrome)
+
+
+def build_html(doc, layout, out_html, font_dir, img_dir):
+    """Write the printable HTML (fonts and pictures embedded). Returns the output path."""
+    with open(out_html, 'w', encoding='utf-8') as fh:
+        fh.write(page_html(doc, layout, font_dir, img_dir, embed=True))
+    return out_html
+
+
+def page_html(doc, layout, font_dir, img_dir, embed=False):
+    """The rebuilt pages as one HTML document, sized for printing."""
     for name in FONT_FILES:
         if not os.path.exists(os.path.join(font_dir, name)):
             raise FileNotFoundError(f'missing font {name} in {font_dir}')
-    chrome = find_chrome(chrome)
     os.makedirs(img_dir, exist_ok=True)
-    pages = [_page_html(doc, page, n, layout, img_dir) for n, page in enumerate(doc)]
+    pages = [_page_html(doc, page, n, layout, img_dir, embed) for n, page in enumerate(doc)]
 
-    css = f"""
-@font-face {{ font-family: 'Bn'; src: url('file://{os.path.abspath(os.path.join(font_dir, FONT_FILES[0]))}'); font-weight: 400; }}
-@font-face {{ font-family: 'Bn'; src: url('file://{os.path.abspath(os.path.join(font_dir, FONT_FILES[1]))}'); font-weight: 700; }}
+    css = font_face_css(font_dir, embed) + f"""
 @page {{ size: {layout.page_w}pt {layout.page_h}pt; margin: 0; }}
 html, body {{ margin: 0; padding: 0; }}
 body {{ font-family: 'Bn', serif; color: #000; }}
@@ -205,15 +238,14 @@ body {{ font-family: 'Bn', serif; color: #000; }}
 .i {{ font-style: italic; }}
 .latin {{ font-family: 'Times New Roman', 'Liberation Serif', serif; }}
 """
-    html = ('<!DOCTYPE html><html lang="bn"><head><meta charset="utf-8"><style>' + css +
+    return ('<!DOCTYPE html><html lang="bn"><head><meta charset="utf-8"><style>' + css +
             '</style></head><body>' + '\n'.join(pages) + FIT_SCRIPT + '</body></html>')
-    return print_html(html, out_pdf, chrome)
 
 
-def font_face_css(font_dir):
+def font_face_css(font_dir, embed=False):
     """@font-face rules for the bundled fonts as family 'Bn' (regular and bold)."""
     return ''.join(
-        f"@font-face {{ font-family: 'Bn'; src: url('file://{os.path.abspath(os.path.join(font_dir, name))}'); "
+        f"@font-face {{ font-family: 'Bn'; src: url('{asset_url(os.path.join(font_dir, name), embed)}'); "
         f"font-weight: {weight}; }}\n" for name, weight in zip(FONT_FILES, (400, 700)))
 
 

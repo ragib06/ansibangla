@@ -1,4 +1,4 @@
-"""Command line: ansibangla FILE.pdf|FILE.docx [...] [-o OUT_DIR] [-f pdf docx epub md]"""
+"""Command line: ansibangla FILE.pdf|FILE.docx [...] [-o OUT_DIR] [-f pdf docx epub md html]"""
 import argparse
 import sys
 

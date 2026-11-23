@@ -249,6 +249,22 @@ def test_docx_input_to_pdf_and_epub(src, tmp_path):
     assert all(w in it for w in md_words)
 
 
+@pytest.mark.skipif(not SAMPLES + DOCX_SAMPLES, reason='no samples in sample/')
+@pytest.mark.parametrize('src', SAMPLES + DOCX_SAMPLES)
+def test_printable_html_is_self_contained(src, tmp_path):
+    """The html output opens anywhere: fonts and pictures are embedded, nothing points at
+    this machine's files, and it says when it is ready to print."""
+    from ansibangla import convert_file
+    written = convert_file(src, tmp_path, formats=('html',))
+    assert set(written) == {'html'}
+    page = open(written['html'], encoding='utf-8').read()
+    assert 'file://' not in page
+    assert page.count("src: url('data:font/ttf;base64,") == 2          # regular and bold
+    assert all(u.startswith('data:image/') for u in re.findall(r'<img [^>]*src="([^"]*)"', page))
+    assert 'dataset.ready' in page
+    assert any('ঀ' <= ch <= '৿' for ch in page)
+
+
 def test_formats_are_only_what_was_asked(tmp_path):
     from ansibangla.api import _check_formats
     assert _check_formats(['PDF', ' md', 'pdf']) == ('pdf', 'md')      # case, spaces, repeats

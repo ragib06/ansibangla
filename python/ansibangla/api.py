@@ -1,4 +1,5 @@
-"""Public functions: convert SutonnyMJ PDFs and Word files to Unicode PDF, DOCX, EPUB and Markdown."""
+"""Public functions: convert SutonnyMJ PDFs and Word files to Unicode PDF, DOCX, EPUB, Markdown
+and printable HTML (the PDF's pages with fonts and pictures embedded, for printing in a browser)."""
 import contextlib
 import os
 import sys
@@ -12,9 +13,9 @@ from .blocks import read_blocks
 from .docxexport import export_docx
 from .epubexport import export_epub
 from .mdexport import export_markdown
-from .pdfbuild import build_pdf
+from .pdfbuild import build_html, build_pdf
 
-FORMATS = ('pdf', 'docx', 'epub', 'md')   # any combination can be asked for
+FORMATS = ('pdf', 'docx', 'epub', 'md', 'html')   # any combination can be asked for
 DEFAULT_FORMATS = ('pdf',)                 # a PDF gives a PDF unless asked otherwise
 DOCX_DEFAULT_FORMATS = ('docx',)           # a .docx gives a .docx unless asked otherwise
 FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
@@ -34,8 +35,8 @@ def _convert_pdf(src, out_dir='.', *, stem=None, formats=DEFAULT_FORMATS, scale=
                  font_dir=None, chrome=None, title=None):
     """Convert one SutonnyMJ PDF.
 
-    formats is any combination of 'pdf', 'docx', 'epub' and 'md', written as
-    <stem>_unicode.pdf, .docx, .epub and .md (Markdown pictures go in
+    formats is any combination of 'pdf', 'docx', 'epub', 'md' and 'html', written as
+    <stem>_unicode.pdf, .docx, .epub, .md and .html (Markdown pictures go in
     <stem>_unicode_images/). title is the e-book title (default: the first heading).
     Returns {format: path}.
     """
@@ -64,6 +65,9 @@ def _convert_pdf(src, out_dir='.', *, stem=None, formats=DEFAULT_FORMATS, scale=
     if 'pdf' in formats:
         with tempfile.TemporaryDirectory(prefix='ansibangla_img_') as tmp:
             written['pdf'] = build_pdf(doc, layout, base + '.pdf', font_dir, tmp, chrome=chrome)
+    if 'html' in formats:
+        with tempfile.TemporaryDirectory(prefix='ansibangla_img_') as tmp:
+            written['html'] = build_html(doc, layout, base + '.html', font_dir, tmp)
     return {f: written[f] for f in formats}
 
 
@@ -73,8 +77,8 @@ def _convert_docx(src, out_dir='.', *, stem=None, formats=DOCX_DEFAULT_FORMATS, 
 
     formats is any combination of 'docx' (the same document with its SutonnyMJ text in
     Unicode and the bundled fonts embedded), 'pdf' (that document laid out at its page
-    size and printed with Chrome), 'epub' and 'md', written as <stem>_unicode.docx, .pdf,
-    .epub and .md. Returns {format: path}.
+    size and printed with Chrome), 'html' (that layout as one printable HTML file), 'epub'
+    and 'md', written as <stem>_unicode.docx, .pdf, .html, .epub and .md. Returns {format: path}.
     """
     formats = _check_formats(formats)
     from .docxinput import convert_docx as _convert
@@ -119,6 +123,8 @@ def _convert_docx(src, out_dir='.', *, stem=None, formats=DOCX_DEFAULT_FORMATS, 
                 written['epub'] = docxrender.export_epub(model, base + '.epub', font_dir, title=title)
             if 'pdf' in formats:
                 written['pdf'] = docxrender.export_pdf(model, base + '.pdf', font_dir, chrome=chrome)
+            if 'html' in formats:
+                written['html'] = docxrender.export_html(model, base + '.html', font_dir)
     return {f: written[f] for f in formats}
 
 
@@ -137,7 +143,7 @@ def _keep_latin(words):
 
 def convert_pdf(src, out_dir='.', *, keep_latin=None, **options):
     """Convert one SutonnyMJ PDF. Options: stem, formats (any of 'pdf', 'docx', 'epub',
-    'md'; default 'pdf'), scale, font_dir, chrome, title; keep_latin lists English words
+    'md', 'html'; default 'pdf'), scale, font_dir, chrome, title; keep_latin lists English words
     typed in the SutonnyMJ font that stay as typed. Returns {format: path}."""
     with _keep_latin(keep_latin):
         return _convert_pdf(src, out_dir, **options)
@@ -152,7 +158,7 @@ def convert_docx(src, out_dir='.', *, keep_latin=None, **options):
 
 def convert_file(src, out_dir='.', *, formats=None, **options):
     """Convert a SutonnyMJ PDF or .docx, choosing by the file extension. formats is any
-    combination of 'pdf', 'docx', 'epub' and 'md'; None gives the same format as the
+    combination of 'pdf', 'docx', 'epub', 'md' and 'html'; None gives the same format as the
     input (pdf for PDFs, docx for Word files)."""
     if src.lower().endswith('.docx'):
         options = {k: v for k, v in options.items()

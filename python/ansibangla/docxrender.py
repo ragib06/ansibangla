@@ -22,7 +22,7 @@ from collections import Counter
 from .blocks import despace, is_letter_spaced_text
 from .docxinput import A, R, Styles, _local, q
 from .mdexport import _escape
-from .pdfbuild import find_chrome, font_face_css, print_html
+from .pdfbuild import READY_SCRIPT, asset_url, find_chrome, font_face_css, print_html
 
 EMU = 12700                      # EMU per pt
 WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing'
@@ -329,8 +329,20 @@ def _blocks_html_pdf(blocks, img_src):
 def export_pdf(model, out_pdf, font_dir, chrome=None):
     """Lay the model out at its page size and margins and print it with Chrome."""
     chrome = find_chrome(chrome)
+    return print_html(page_html(model, font_dir), out_pdf, chrome)
+
+
+def export_html(model, out_html, font_dir):
+    """The page layout as one HTML file, fonts and pictures embedded, for printing in a browser."""
+    with open(out_html, 'w', encoding='utf-8') as fh:
+        fh.write(page_html(model, font_dir, embed=True))
+    return out_html
+
+
+def page_html(model, font_dir, embed=False):
+    """The model laid out at its page size and margins, as HTML for printing."""
     page = model['page']
-    css = (font_face_css(font_dir) +
+    css = (font_face_css(font_dir, embed) +
            f"@page {{ size: {page['w']:.1f}pt {page['h']:.1f}pt; margin: {page['top']:.1f}pt "
            f"{page['right']:.1f}pt {page['bottom']:.1f}pt {page['left']:.1f}pt; "
            f"background: {page.get('bg', '#fff')}; }}\n"        # the page colour reaches the margins
@@ -348,10 +360,9 @@ def export_pdf(model, out_pdf, font_dir, chrome=None):
            ".b { font-weight: 700; } .i { font-style: italic; }\n"
            "table { border-collapse: collapse; width: 100%; table-layout: fixed; } td { border: 0.5pt solid #000; "
            "vertical-align: top; padding: 2pt 4pt; }\n")
-    body = _blocks_html_pdf(model['blocks'], lambda pic: 'file://' + os.path.abspath(pic['path']))
-    doc = ('<!DOCTYPE html><html lang="bn"><head><meta charset="utf-8"><style>' + css +
-           '</style></head><body>' + body + '</body></html>')
-    return print_html(doc, out_pdf, chrome)
+    body = _blocks_html_pdf(model['blocks'], lambda pic: asset_url(pic['path'], embed))
+    return ('<!DOCTYPE html><html lang="bn"><head><meta charset="utf-8"><style>' + css +
+            '</style></head><body>' + body + READY_SCRIPT + '</body></html>')
 
 
 # ---------------------------------------------------------------- EPUB
