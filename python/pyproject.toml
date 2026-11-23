@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ansibangla"
-version = "1.0.0"
+version = "1.0.1"
 description = "Convert ANSI Bangla (Bijoy / SutonnyMJ) PDFs and Word documents to Unicode, keeping their formatting: PDF, Word, EPUB, Markdown and printable HTML."
 readme = "README.md"
 license = "MIT"
