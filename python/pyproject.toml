@@ -11,7 +11,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Ragib Ahsan" }]
 requires-python = ">=3.9"
-dependencies = ["pymupdf>=1.24.3"]
+dependencies = ["pymupdf>=1.24.3,<2"]  # 2.x pulls in ~200 MB of AI layout packages this tool does not use
 keywords = ["bengali", "bangla", "ansi", "sutonnymj", "bijoy", "unicode", "pdf", "docx", "epub", "converter"]
 classifiers = [
     "Development Status :: 4 - Beta",
