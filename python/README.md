@@ -40,24 +40,22 @@ The outputs, for PDF or Word input:
 
 ## Install
 
-The Python package lives in the `python/` folder of the repository. Clone it and install
-into a virtual environment:
+From PyPI, into a virtual environment:
 
 ```sh
-git clone https://github.com/ragib06/ansibangla ansibangla
-cd ansibangla/python
 python3 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install .
+pip install ansibangla
 ```
 
-Or install straight from git without cloning:
+Or as a stand-alone command with [pipx](https://pipx.pypa.io/) or [uv](https://docs.astral.sh/uv/):
+`pipx install ansibangla` or `uv tool install ansibangla`.
 
-```sh
-pip install "git+https://github.com/ragib06/ansibangla#subdirectory=python"
-```
+No install at all: the web app at <https://ansibangla.vercel.app/> runs the same converter
+in your browser.
 
-For development (code changes take effect without reinstalling), from `python/`:
+For development, from the `python/` folder of a checkout (code changes take effect
+without reinstalling):
 
 ```sh
 pip install -e . pytest
