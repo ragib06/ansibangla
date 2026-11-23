@@ -3,9 +3,33 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ANSI Bangla</title>
+    <title>Bijoy to Unicode PDF &amp; Word Converter – বিজয় থেকে ইউনিকোড</title>
+    <link rel="canonical" href="https://ansibangla.cc/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ANSI Bangla" />
+    <meta property="og:url" content="https://ansibangla.cc/" />
+    <meta property="og:title" content="Bijoy to Unicode PDF &amp; Word Converter – বিজয় থেকে ইউনিকোড" />
+    <meta property="og:description" content="Convert whole Bijoy (SutonnyMJ) Bangla PDFs and Word files to Unicode, keeping pages, pictures and formatting. Free, and your files never leave your device." />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="bn_BD" />
+    <meta name="twitter:card" content="summary" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "ANSI Bangla – Bijoy to Unicode converter",
+        "alternateName": ["বিজয় থেকে ইউনিকোড কনভার্টার", "SutonnyMJ to Unicode converter"],
+        "url": "https://ansibangla.cc/",
+        "description": "Converts Bijoy (SutonnyMJ) Bangla PDF and Word (.docx) files to Unicode Bengali in the browser, keeping their layout. Outputs PDF, Word, EPUB and Markdown.",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Any (web browser)",
+        "inLanguage": ["bn", "en"],
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%239b2c1f'/%3E%3Ctext x='16' y='23' font-size='19' text-anchor='middle' fill='%23fffaf2' font-family='serif'%3E%E0%A6%85%3C/text%3E%3C/svg%3E" />
-    <meta name="description" content="Convert SutonnyMJ (Bijoy) Bengali PDFs and Word files to Unicode in your browser, keeping their layout." />
+    <meta name="description" content="Convert Bijoy (SutonnyMJ) Bangla PDF and Word files to Unicode, keeping pages, pictures and formatting. Free, in your browser; files are never uploaded." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Bengali:wght@500;700&display=swap" rel="stylesheet" />
@@ -59,6 +83,61 @@
         </div>
         <ul id="result-list"></ul>
         <p id="notes" class="notes" hidden></p>
+      </section>
+
+      <section class="about" aria-labelledby="about-title">
+        <h2 id="about-title">Bijoy to Unicode, the whole file at once</h2>
+        <p>
+          Most Bijoy converters take text pasted into a box. This one takes the whole PDF or
+          Word file typed in SutonnyMJ or another Bijoy font and gives back Unicode Bangla with
+          the same pages, headings, pictures and formatting, ready to search, copy and edit.
+        </p>
+        <p lang="bn">
+          বিজয় বা সুতন্বী এমজে (SutonnyMJ) ফন্টে লেখা পুরো পিডিএফ বা ওয়ার্ড ফাইল একবারে
+          ইউনিকোডে রূপান্তর করুন। পৃষ্ঠা, ছবি ও ফরম্যাটিং আগের মতোই থাকে।
+        </p>
+
+        <h3>Questions</h3>
+        <details>
+          <summary>Why does text from my Bijoy PDF come out as gibberish?</summary>
+          <p>
+            Bijoy (ANSI) fonts such as SutonnyMJ draw Bangla letters on top of English key
+            codes, so the file really stores text like <code>wbwØ©avq</code>. It only looks
+            right in that font, and copying, searching or opening it elsewhere shows the codes.
+            Unicode stores the real letters (<span lang="bn">নির্দ্বিধায়</span>), so the text
+            works everywhere.
+          </p>
+        </details>
+        <details lang="bn">
+          <summary>বিজয় পিডিএফ থেকে লেখা কপি করলে হিজিবিজি আসে কেন?</summary>
+          <p>
+            বিজয়ের সুতন্বী এমজে-র মতো ফন্ট ইংরেজি অক্ষরের জায়গায় বাংলা দেখায়, তাই ফাইলে আসলে
+            ইংরেজি কোড থাকে। ইউনিকোডে রূপান্তর করলে আসল বাংলা অক্ষর পাওয়া যায়, যা যেকোনো
+            জায়গায় কপি, সার্চ ও এডিট করা যায়।
+          </p>
+        </details>
+        <details>
+          <summary>Which files can I convert?</summary>
+          <p>
+            PDFs and Word <code>.docx</code> files typed in SutonnyMJ and other Bijoy fonts.
+            Save an older <code>.doc</code> file as <code>.docx</code> in Word first. Scanned
+            PDFs (pictures of pages) have no text to convert.
+          </p>
+        </details>
+        <details>
+          <summary>What do I get back?</summary>
+          <p>
+            A Unicode PDF with the same page layout, a Word document with the original
+            formatting, an EPUB e-book, or Markdown. Pick any combination.
+          </p>
+        </details>
+        <details>
+          <summary>Are my files uploaded?</summary>
+          <p>
+            No. The converter runs inside your browser, so your files never leave your
+            device. After the first visit it loads from your browser's cache.
+          </p>
+        </details>
       </section>
 
       <footer class="foot">
