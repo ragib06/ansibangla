@@ -17,10 +17,19 @@ const resultList = $('#result-list');
 const notesEl = $('#notes');
 const errorEl = $('#error');
 
+const tabFile = $<HTMLButtonElement>('#tab-file');
+const tabText = $<HTMLButtonElement>('#tab-text');
+const textPanel = $('#text-panel');
+const bijoyIn = $<HTMLTextAreaElement>('#bijoy-in');
+const unicodeOut = $<HTMLTextAreaElement>('#unicode-out');
+const copyBtn = $<HTMLButtonElement>('#copy');
+const textError = $('#text-error');
+
 const STAGES: Record<Stage, string> = {
   runtime: 'Loading the Python runtime…',
-  pymupdf: 'Loading the PDF reader (about 17 MB, once)…',
   package: 'Loading the converter…',
+  text: 'Text converter ready. Loading the PDF reader (about 17 MB, once)…',
+  pymupdf: 'Text converter ready. Loading the PDF reader (about 17 MB, once)…',
   ready: 'Ready. Your files stay on this device.',
 };
 
@@ -32,6 +41,7 @@ const LABELS: Record<Format, string> = {
 };
 
 let workerReady = false;
+let textReady = false;
 let busy = false;
 let file: File | null = null;
 let nextId = 1;
@@ -44,7 +54,18 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
     statusText.textContent = STAGES[msg.stage];
     statusEl.dataset.state = msg.stage === 'ready' ? 'ready' : 'loading';
     workerReady = msg.stage === 'ready';
+    if (!textReady && (msg.stage === 'text' || msg.stage === 'pymupdf' || msg.stage === 'ready')) {
+      textReady = true;
+      convertText();                     // anything pasted while loading
+    }
     update();
+  } else if (msg.type === 'text') {
+    if (msg.id !== lastTextId) return;   // a newer edit is already on its way
+    unicodeOut.value = msg.text;
+    copyBtn.disabled = !msg.text;
+  } else if (msg.type === 'error' && msg.text) {
+    textError.textContent = msg.message;
+    textError.hidden = false;
   } else if (msg.type === 'done') {
     busy = false;
     showResults(msg.files, msg.notes, msg.seconds);
@@ -88,6 +109,7 @@ function setFile(f: File | undefined) {
     i.checked = i.value === (isPdf ? 'html' : 'docx');
   });
   results.hidden = true;
+  delete results.dataset.filled;
   update();
 }
 
@@ -110,6 +132,7 @@ form.addEventListener('submit', async (e) => {
   busy = true;
   errorEl.hidden = true;
   results.hidden = true;
+  delete results.dataset.filled;
   update();
   const msg: ToWorker = {
     type: 'convert',
@@ -117,7 +140,7 @@ form.addEventListener('submit', async (e) => {
     name: file.name,
     bytes: await file.arrayBuffer(),
     formats: selectedFormats(),
-    keepLatin: keepLatin.value.split('\n').flatMap((l) => l.split('#')[0].split(/\s+/)).filter(Boolean),
+    keepLatin: keepLatinWords(),
   };
   worker.postMessage(msg, [msg.bytes]);
 });
@@ -128,6 +151,7 @@ function showResults(files: OutputFile[], notes: string, seconds: number) {
   notesEl.textContent = notes.trim().replace(/^note: /gm, '');
   notesEl.hidden = !notes.trim();
   results.hidden = false;
+  results.dataset.filled = 'true';
   results.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -197,6 +221,86 @@ function download(f: OutputFile) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
+
+// ---------------------------------------------------------------- tabs
+
+function showTab(which: 'file' | 'text', remember = true) {
+  const text = which === 'text';
+  tabFile.setAttribute('aria-selected', String(!text));
+  tabText.setAttribute('aria-selected', String(text));
+  form.hidden = text;
+  textPanel.hidden = !text;
+  results.hidden = text || results.dataset.filled !== 'true';
+  if (remember) {
+    try { localStorage.setItem('ansibangla.tab', which); } catch { /* storage blocked */ }
+  }
+  if (text) bijoyIn.focus();
+}
+
+tabFile.addEventListener('click', () => showTab('file'));
+tabText.addEventListener('click', () => showTab('text'));
+// arrow keys move between the two tabs
+for (const tab of [tabFile, tabText]) {
+  tab.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const other = tab === tabFile ? tabText : tabFile;
+    other.click();
+    other.focus();
+  });
+}
+try {
+  if (location.hash === '#text' || localStorage.getItem('ansibangla.tab') === 'text') showTab('text', false);
+} catch { /* storage blocked */ }
+
+// ---------------------------------------------------------------- paste text
+
+let lastTextId = 0;
+let textTimer: ReturnType<typeof setTimeout> | undefined;
+
+function keepLatinWords() {
+  return keepLatin.value.split('\n').flatMap((l) => l.split('#')[0].split(/\s+/)).filter(Boolean);
+}
+
+function convertText() {
+  clearTimeout(textTimer);
+  textError.hidden = true;
+  const text = bijoyIn.value;
+  if (!text) {
+    lastTextId++;
+    unicodeOut.value = '';
+    copyBtn.disabled = true;
+    return;
+  }
+  if (!textReady) {
+    unicodeOut.value = '';
+    unicodeOut.placeholder = 'Loading the converter…';
+    return;
+  }
+  unicodeOut.placeholder = 'ইউনিকোড লেখা এখানে আসবে';
+  const msg: ToWorker = { type: 'text', id: ++lastTextId, text, keepLatin: keepLatinWords() };
+  worker.postMessage(msg);
+}
+
+// convert as the text changes, a moment after typing stops
+bijoyIn.addEventListener('input', () => {
+  clearTimeout(textTimer);
+  textTimer = setTimeout(convertText, 120);
+});
+keepLatin.addEventListener('input', () => {
+  clearTimeout(textTimer);
+  textTimer = setTimeout(convertText, 300);
+});
+
+copyBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(unicodeOut.value);
+  } catch {
+    unicodeOut.select();
+    document.execCommand('copy');
+  }
+  copyBtn.textContent = 'Copied';
+  setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+});
 
 function showError(message: string) {
   errorEl.textContent = message;

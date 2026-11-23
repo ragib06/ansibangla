@@ -1,4 +1,4 @@
-// Zip the ansibangla Python package (and the web glue module) into public/ansibangla.zip,
+// Zip the ansibangla Python package (and the web glue modules) into public/ansibangla.zip,
 // which the worker unpacks into Pyodide. Runs before `dev` and `build`.
 import { zipSync } from 'fflate';
 import fs from 'node:fs';
@@ -20,7 +20,7 @@ function add(dir, prefix) {
 }
 
 add(pkg, 'ansibangla/');
-files['webconvert.py'] = fs.readFileSync(path.join(web, 'py', 'webconvert.py'));
+for (const f of ['webconvert.py', 'webtext.py']) files[f] = fs.readFileSync(path.join(web, 'py', f));
 fs.mkdirSync(path.join(web, 'public'), { recursive: true });
 const out = path.join(web, 'public', 'ansibangla.zip');
 fs.writeFileSync(out, zipSync(files, { mtime: '2000-01-01' }));

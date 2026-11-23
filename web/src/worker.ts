@@ -1,5 +1,7 @@
 /// <reference lib="webworker" />
 // Runs the ansibangla Python package in Pyodide, off the main thread.
+// Text conversion needs only Python and bijoy.py, so it is ready first; file conversion
+// also needs PyMuPDF (about 17 MB), which loads after.
 import type { Format, FromWorker, OutputFile, Stage, ToWorker } from './protocol';
 
 const PYODIDE_URL = 'https://cdn.jsdelivr.net/pyodide/v0.28.3/full/';
@@ -15,7 +17,7 @@ interface Pyodide {
   loadPackage(names: string | string[]): Promise<void>;
   unpackArchive(buffer: ArrayBuffer, format: string, options?: { extractDir?: string }): void;
   runPython(code: string): unknown;
-  pyimport(name: string): { run(...args: unknown[]): PyProxy };
+  pyimport(name: string): { run(...args: unknown[]): PyProxy; convert(...args: unknown[]): string };
   toPy(value: unknown): unknown;
 }
 
@@ -27,31 +29,50 @@ function stage(s: Stage) {
   post({ type: 'stage', stage: s });
 }
 
-async function start(): Promise<Pyodide> {
+async function loadText(): Promise<Pyodide> {
   stage('runtime');
+  // the worker lives one folder down (src/ in dev, assets/ when built), the zip at the site root
+  const zip = fetch(new URL('../ansibangla.zip', self.location.href)).then((res) => {
+    if (!res.ok) throw new Error(`could not load the converter (${res.status})`);
+    return res.arrayBuffer();
+  });
   const { loadPyodide } = await import(/* @vite-ignore */ `${PYODIDE_URL}pyodide.mjs`);
   const py: Pyodide = await loadPyodide({ indexURL: PYODIDE_URL });
+  stage('package');
+  py.unpackArchive(await zip, 'zip', { extractDir: '/app' });
+  py.runPython("import sys; sys.path.insert(0, '/app')");
+  py.pyimport('webtext');
+  stage('text');
+  return py;
+}
+
+async function loadFiles(text: Promise<Pyodide>): Promise<Pyodide> {
+  const py = await text;
   stage('pymupdf');
   await py.loadPackage('pymupdf');
-  stage('package');
-  // the worker lives one folder down (src/ in dev, assets/ when built), the zip at the site root
-  const res = await fetch(new URL('../ansibangla.zip', self.location.href));
-  if (!res.ok) throw new Error(`could not load the converter (${res.status})`);
-  py.unpackArchive(await res.arrayBuffer(), 'zip', { extractDir: '/app' });
-  py.runPython("import sys; sys.path.insert(0, '/app')");
   py.pyimport('webconvert');            // import now, so the first conversion starts at once
   stage('ready');
   return py;
 }
 
-const ready = start();
-ready.catch((e) => post({ type: 'error', id: null, message: String(e?.message ?? e) }));
+const textReady = loadText();
+const fileReady = loadFiles(textReady);
+fileReady.catch((e) => post({ type: 'error', id: null, message: String(e?.message ?? e) }));
 
 self.onmessage = async (ev: MessageEvent<ToWorker>) => {
   const msg = ev.data;
-  if (msg.type !== 'convert') return;
+  if (msg.type === 'text') {
+    try {
+      const py = await textReady;
+      const text = py.pyimport('webtext').convert(msg.text, py.toPy(msg.keepLatin));
+      post({ type: 'text', id: msg.id, text });
+    } catch (e) {
+      post({ type: 'error', id: msg.id, message: pythonError(e), text: true });
+    }
+    return;
+  }
   try {
-    const py = await ready;
+    const py = await fileReady;
     const t0 = performance.now();
     const run = py.pyimport('webconvert').run;
     const result = run(msg.name, py.toPy(new Uint8Array(msg.bytes)), py.toPy(msg.formats),

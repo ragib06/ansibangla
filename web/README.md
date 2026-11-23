@@ -9,6 +9,7 @@ Worker. The site is static files only, so any static host works.
 
 | Output | How it is made |
 |--------|----------------|
+| Pasted text | The **Paste text** tab converts as you type with `py/webtext.py`, which loads only `bijoy.py` (no PyMuPDF), so it works within a few seconds of the page opening, before PyMuPDF has loaded. |
 | Word, EPUB, Markdown | The package writes them in Pyodide; the page offers them as downloads. Markdown with pictures comes as a `.zip`. |
 | PDF | The package writes its `html` output (the PDF's pages with fonts and pictures embedded). The page loads it in a hidden frame, waits until its text is fitted, and opens the print dialog, where **Save as PDF** gives the file. In Chrome this is the same engine the command-line tool prints with, and the pages match it. |
 
@@ -41,7 +42,8 @@ src/main.ts              form, results, downloads
 src/worker.ts            loads Pyodide + PyMuPDF + the package, runs conversions
 src/print.ts             prints the html output through a hidden frame
 src/protocol.ts          messages between page and worker
-py/webconvert.py         Python side: bytes in, output files as bytes out
+py/webconvert.py         Python side for files: bytes in, output files as bytes out
+py/webtext.py            Python side for pasted text (bijoy.py only)
 scripts/pack-python.mjs  zips the package into public/ansibangla.zip
 ```
 

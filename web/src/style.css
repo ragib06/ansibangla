@@ -91,6 +91,57 @@ body {
 }
 .card + .card { margin-top: 16px; }
 
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 18px;
+  border-radius: 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+.tab {
+  min-height: 38px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  font-size: .95rem;
+  cursor: pointer;
+}
+.tab[aria-selected='true'] {
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .08), 0 0 0 1px var(--line);
+}
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.text-panel textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  resize: vertical;
+}
+.text-panel textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* readers with SutonnyMJ installed see their Bijoy text as Bangla */
+.bijoy-in { font: 17px/1.6 'SutonnyMJ', ui-monospace, SFMono-Regular, Menlo, monospace; }
+.unicode-out { font: 18px/1.7 var(--serif-bn); }
+.field-label { display: block; margin: 0 0 6px; font-size: .85rem; font-weight: 600; color: var(--muted); }
+.field-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+.field-head .field-label { margin-bottom: 6px; }
+.btn.small { min-height: 32px; padding: 0 12px; font-size: .85rem; margin-bottom: 6px; }
+
 .drop {
   display: grid;
   justify-items: center;
