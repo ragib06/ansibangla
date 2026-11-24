@@ -26,3 +26,6 @@ node_modules/
 
 # built from python/ansibangla by web/scripts/pack-python.mjs
 web/public/ansibangla.zip
+
+# local Claude Code settings (machine-specific paths and permissions)
+.claude/
