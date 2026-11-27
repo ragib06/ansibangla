@@ -46,6 +46,9 @@ src/protocol.ts          messages between page and worker
 py/webconvert.py         Python side for files: bytes in, output files as bytes out
 py/webtext.py            Python side for pasted text (bijoy.py only)
 scripts/pack-python.mjs  zips the package into public/ansibangla.zip
+scripts/indexnow.mjs     tells Bing and other IndexNow engines the pages changed (npm run indexnow, after a deploy)
+scripts/og-card.*        the social preview card, public/og.png
+public/llms.txt          a plain summary of the site for AI tools
 ```
 
 ## Limits

@@ -1,4 +1,3 @@
-import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -7,10 +6,11 @@ export default defineConfig({
   worker: { format: 'es' },
   build: {
     rollupOptions: {
-      // the converter, and the "how it works" page (served at /how-it-works/)
+      // the converter, and the "how it works" page (served at /how-it-works/); paths are
+      // relative to the project root (this folder)
       input: {
-        main: resolve(__dirname, 'index.html'),
-        how: resolve(__dirname, 'how-it-works/index.html'),
+        main: 'index.html',
+        how: 'how-it-works/index.html',
       },
     },
   },

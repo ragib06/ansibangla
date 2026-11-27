@@ -7,7 +7,8 @@
     "pack": "node scripts/pack-python.mjs",
     "dev": "npm run pack && vite",
     "build": "npm run pack && tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "indexnow": "node scripts/indexnow.mjs"
   },
   "devDependencies": {
     "fflate": "0.8.3",

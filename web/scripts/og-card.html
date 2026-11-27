@@ -1,0 +1,44 @@
+<!doctype html>
+<!-- The social preview card (public/og.png, 1200 x 630). Rebuild after editing:
+     node scripts/og-card.mjs -->
+<html lang="bn">
+<head>
+<meta charset="utf-8" />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Bengali:wght@500;700&family=Noto+Sans:wght@500;600&display=block" rel="stylesheet" />
+<style>
+  html, body { margin: 0; }
+  body {
+    width: 1200px; height: 630px; box-sizing: border-box; padding: 64px 80px;
+    background: #f6f1e7; color: #1f1a14; font-family: 'Noto Sans', sans-serif;
+    display: flex; flex-direction: column; justify-content: space-between;
+    border-bottom: 14px solid #9b2c1f;
+  }
+  .eyebrow { font-size: 26px; font-weight: 600; letter-spacing: .16em; color: #9b2c1f; }
+  h1 { margin: 10px 0 0; font: 700 96px/1.2 'Noto Serif Bengali', serif; }
+  .sub { margin: 14px 0 0; font-size: 34px; color: #4a4036; }
+  .example {
+    display: flex; align-items: center; gap: 28px; margin-top: 34px;
+    padding: 22px 30px; background: #fffdf8; border: 2px solid #e2d8c6; border-radius: 18px; width: fit-content;
+  }
+  .example code { font: 40px ui-monospace, 'DejaVu Sans Mono', monospace; color: #6b6155; }
+  .example .arrow { font-size: 44px; color: #9b2c1f; font-weight: 700; }
+  .example .bn { font: 700 50px 'Noto Serif Bengali', serif; }
+  .foot { display: flex; justify-content: space-between; align-items: baseline; font-size: 30px; }
+  .formats { font-weight: 600; }
+  .formats span { color: #9b2c1f; margin: 0 10px; }
+  .url { color: #9b2c1f; font-weight: 600; }
+</style>
+</head>
+<body>
+  <div>
+    <div class="eyebrow">ANSI BANGLA</div>
+    <h1>বিজয় থেকে ইউনিকোড</h1>
+    <p class="sub">Bijoy (SutonnyMJ) to Unicode, whole files, layout kept</p>
+    <div class="example"><code>wbwØ©avq</code><span class="arrow">→</span><span class="bn">নির্দ্বিধায়</span></div>
+  </div>
+  <div class="foot">
+    <div class="formats">PDF<span>·</span>Word<span>·</span>EPUB<span>·</span>Text</div>
+    <div class="url">ansibangla.cc</div>
+  </div>
+</body>
+</html>

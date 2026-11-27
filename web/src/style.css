@@ -289,6 +289,11 @@ body {
 .about summary { cursor: pointer; font-weight: 600; }
 .about details p { margin: 8px 0 2px; color: var(--muted); }
 .about code { font: .85em ui-monospace, SFMono-Regular, Menlo, monospace; }
+.about kbd { font: .85em ui-monospace, SFMono-Regular, Menlo, monospace; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; }
+.steps { margin: 0 0 6px; padding-left: 1.4em; }
+.steps li { margin: 4px 0; }
+.steps-bn { color: var(--muted); }
+.about details a { color: var(--accent); }
 
 /* ---- how it works (a reading page, Bangla first) ---- */
 .doc { font-family: var(--serif-bn), system-ui, sans-serif; font-weight: 500; line-height: 1.75; }

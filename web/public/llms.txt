@@ -1,0 +1,24 @@
+# ANSI Bangla (ansibangla.cc)
+
+> Free converter from Bijoy (ANSI) Bangla, typed in SutonnyMJ and other Bijoy "MJ" fonts, to Unicode Bangla. It converts whole PDF and Word (.docx) files, keeping their pages, pictures, tables and formatting, and also pasted text. Outputs: Unicode PDF with the same layout, Word, EPUB e-book and Markdown. Runs entirely in the browser; files are not uploaded. The Unicode output works with Nikosh (NikoshBAN) and any other Unicode Bangla font.
+
+Bangla: বিজয় (সুতন্বী এমজে) থেকে ইউনিকোড রূপান্তর, পুরো পিডিএফ ও ওয়ার্ড ফাইল লেআউট ঠিক রেখে, আর ই-বুক (EPUB) তৈরি।
+
+## Use it
+
+- [Converter](https://ansibangla.cc/): choose a PDF or .docx file typed in SutonnyMJ, pick PDF / Word / EPUB / Markdown, convert, download. A "Paste text" tab converts a few lines as you type.
+- [How it works (Bangla)](https://ansibangla.cc/how-it-works/): why Bijoy text shows as gibberish (e.g. `wbwØ©avq` for নির্দ্বিধায়), what is kept for PDF and Word input, each output, getting text into Nikosh, a publisher's route from a Bijoy book to an EPUB, and limits.
+
+## Facts
+
+- What it is for: books and documents typed in Bijoy: publishers, writers and offices moving to Unicode, and anyone whose Bijoy PDF copies out as gibberish.
+- PDF input: each page is rebuilt at its original size and positions in a Unicode font (Noto Serif Bengali), so text becomes searchable and copyable. Scanned PDFs (pictures of pages) have no text to convert.
+- Word input: only SutonnyMJ text changes; styles, tables, pictures, headers and footers stay. Page numbers stay in Bangla digits. Old .doc files must be saved as .docx first. An already-Unicode .docx (for example an edited earlier output) can be turned into PDF, EPUB or Markdown.
+- EPUB output: chapters follow the document's page breaks and large headings, with a table of contents; footnotes are pop-up notes; pictures are resized for e-readers.
+- Nikosh: the output is Unicode, so selecting all text and choosing the NikoshBAN font is enough.
+- Price and privacy: free; conversion runs locally in the browser (Python in WebAssembly via Pyodide); only anonymous page views are counted.
+
+## For developers
+
+- [Python package and CLI on PyPI](https://pypi.org/project/ansibangla/): `pip install ansibangla`, then `ansibangla book.pdf -f pdf docx epub md`.
+- [Source on GitHub](https://github.com/ragib06/ansibangla): MIT License; bundled fonts under the SIL Open Font License.
