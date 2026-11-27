@@ -10,4 +10,4 @@ from .api import DEFAULT_FORMATS, FORMATS, convert_docx, convert_file, convert_p
 from .bijoy import convert as bijoy_convert
 
 __all__ = ['convert_file', 'convert_pdf', 'convert_docx', 'convert_text', 'bijoy_convert', 'FORMATS', 'DEFAULT_FORMATS']
-__version__ = '1.0.4'
+__version__ = '1.0.5'

@@ -291,6 +291,9 @@ def _heading_level(para, body_size):
 
 # ---------------------------------------------------------------- runs as HTML
 
+VERT_SCALE = 0.65                  # size of superscript / subscript text, as Word draws it
+
+
 def _runs_html(runs, size_unit):
     """Runs as HTML. size_unit(half_points) gives the CSS font size."""
     out = []
@@ -302,12 +305,18 @@ def _runs_html(runs, size_unit):
         text = html.escape(r['text'], quote=False).replace('\t', '&#8195;').replace('\n', '<br/>')
         cls = (['b'] if r['bold'] else []) + (['i'] if r['italic'] else [])
         latin = r['font'] and not r['font'].startswith('Noto Serif Bengali') and not re.search('[ঀ-৿]', r['text'])
-        style = f'font-size:{size_unit(r["size"])}'
+        vert = r.get('vert')
+        # Word draws superscript and subscript text at about two thirds of its size
+        style = f'font-size:{size_unit(r["size"] * VERT_SCALE if vert else r["size"])}'
         if latin:
             style += f';font-family:{LATIN}'
         attr = f' class="{" ".join(cls)}"' if cls else ''
         span = f'<span{attr} style="{style}">{text}</span>'
-        out.append(f'<sup>{span}</sup>' if r.get('sup') else span)
+        if r.get('sup') or vert == 'superscript':
+            span = f'<sup>{span}</sup>'
+        elif vert == 'subscript':
+            span = f'<sub>{span}</sub>'
+        out.append(span)
     return ''.join(out)
 
 
@@ -410,7 +419,8 @@ def page_html(model, font_dir, embed=False):
            ".cover img { max-width: 100%; max-height: 100%; }\n"
            ".b { font-weight: 700; } .i { font-style: italic; }\n"
            "table { border-collapse: collapse; width: 100%; table-layout: fixed; } "
-           "td { vertical-align: top; padding: 2pt 4pt; } table.grid td { border: 0.5pt solid #000; }\n")
+           "td { vertical-align: top; padding: 2pt 4pt; } table.grid td { border: 0.5pt solid #000; }\n"
+           "sup, sub { line-height: 0; }\n")
     body = _blocks_html_pdf(model['blocks'], lambda pic: asset_url(pic['path'], embed))
     return ('<!DOCTYPE html><html lang="bn"><head><meta charset="utf-8"><style>' + css +
             '</style></head><body>' + body + READY_SCRIPT + '</body></html>')
@@ -468,20 +478,39 @@ def export_epub(model, out_epub, font_dir, title=None):
     def blank(b):
         return b['kind'] == 'p' and not text_of(b) and not _pictures(b['runs'])
 
+    # line height of the body text, relative to its size (the body text's exact spacing)
+    ratios = Counter(round(b['line'] / 20 / (body / 2), 2) for b in _paragraphs(model['blocks'])
+                     if b['rule'] == 'exact' and any(r.get('size') == body for r in b['runs']))
+    line_height = max(ratios.most_common(1)[0][0] if ratios else 1.5, 1.3)
+
+    def space_above(k):
+        """Space above block k in em: its own spacing before, plus a line for each empty
+        paragraph just before it (at most two). Books typed in Word space headings and
+        scene breaks with empty lines, which the e-book does not keep as paragraphs.
+        None at the top of a page."""
+        if not book.chapters[-1]['parts']:
+            return None
+        n, j = 0, k - 1
+        while j >= 0 and blank(blocks[j]) and not (by_breaks and j + 1 in starts):
+            n, j = n + 1, j - 1
+        b = blocks[k]
+        return (b.get('before', 0) or 0) / em + min(n, 2) * line_height
+
     def display(b):
         """A large heading line, bold or not: short text, all of it well above body size."""
         shown = [r for r in b.get('runs', []) if r.get('text', '').strip()] if b['kind'] == 'p' else []
         return (bool(shown) and not _pictures(b['runs']) and len(text_of(b)) <= 100
                 and min(r['size'] for r in shown) >= body + 3)
 
-    def section(b, sid_text):
+    def section(k, sid_text):
         """A section heading: an entry under the current titled chapter."""
         nonlocal n_sec
+        b = blocks[k]
         n_sec += 1
         sid = f'sec{n_sec}'
         owner = next((c for c in reversed(book.chapters) if c.get('toc', True)), book.chapters[-1])
         owner['subs'].append((sid, sid_text, book.chapters[-1]['file']))
-        style = f'margin:{b["before"] / em:.2f}em 0 {b["after"] / em:.2f}em'
+        style = f'margin:{space_above(k) or 0:.2f}em 0 {b["after"] / em:.2f}em'
         if b['align'] == 'center':
             style += ';text-align:center'
         if head_size(b) > body:
@@ -521,7 +550,7 @@ def export_epub(model, out_epub, font_dir, title=None):
             if len(book.chapters) > 1:
                 book.chapters[-1]['toc'] = False  # a page without a heading: no entry of its own
         if by_breaks and b['kind'] == 'p' and _heading_level(b, body):
-            section(b, text_of(b))
+            section(k, text_of(b))
             k += 1
             continue
         if b['kind'] == 'table':
@@ -531,7 +560,11 @@ def export_epub(model, out_epub, font_dir, title=None):
                 return ''.join(
                     f'<p class="{"c" if p["align"] == "center" else "r" if p["align"] in ("right", "end") else "l"}">'
                     f'{_runs_html(p["runs"], size_em)}</p>' for p in _paragraphs(cell))
-            book.add(_table_html(b, cell_html))
+            table_html = _table_html(b, cell_html)
+            top = space_above(k)
+            if top:                               # tables have 1em above in CSS; empty lines add to it
+                table_html = table_html.replace('<table', f'<table style="margin-top:{1 + top:.2f}em"', 1)
+            book.add(table_html)
             k += 1
             continue
         level = _heading_level(b, body)
@@ -564,7 +597,7 @@ def export_epub(model, out_epub, font_dir, title=None):
             sid = f'sec{n_sec}'
             text = ''.join(r.get('text', '') for r in b['runs']).strip()
             book.chapters[-1]['subs'].append((sid, text))
-            book.add(f'<h2 id="{sid}" style="margin:{b["before"] / em:.2f}em 0 {b["after"] / em:.2f}em">'
+            book.add(f'<h2 id="{sid}" style="margin:{space_above(k) or 0:.2f}em 0 {b["after"] / em:.2f}em">'
                      f'{html.escape(text, quote=False)}</h2>')
             k += 1
             continue
@@ -590,8 +623,9 @@ def export_epub(model, out_epub, font_dir, title=None):
             style.append(f'text-indent:{b["first"] / em:.2f}em')
         if b['left']:
             style.append(f'margin-left:{b["left"] / em:.2f}em')
-        if b['before'] or b['after']:
-            style.append(f'margin-top:{b["before"] / em:.2f}em;margin-bottom:{b["after"] / em:.2f}em')
+        top = space_above(k) or 0
+        if top or b['after']:
+            style.append(f'margin-top:{top:.2f}em;margin-bottom:{b["after"] / em:.2f}em')
         if b['align'] in ('left', 'start'):
             style.append('text-align:left')
         elif b['align'] in ('right', 'end'):
@@ -615,11 +649,7 @@ def export_epub(model, out_epub, font_dir, title=None):
     title = title or next((c['title'] for c in book.chapters if c['title']), None) or 'Untitled'
     for n, c in enumerate(book.chapters, 1):
         c['title'] = c['title'] or (title if n == 1 else f'{n}')
-    # line height of the body text, relative to its size (the body text's exact spacing)
-    ratios = Counter(round(b['line'] / 20 / (body / 2), 2) for b in _paragraphs(model['blocks'])
-                     if b['rule'] == 'exact' and any(r.get('size') == body for r in b['runs']))
-    line_height = ratios.most_common(1)[0][0] if ratios else 1.5
-    _write_package(out_epub, book, images, cover, title, font_dir, max(line_height, 1.3))
+    _write_package(out_epub, book, images, cover, title, font_dir, line_height)
     return out_epub
 
 
@@ -636,6 +666,9 @@ def _md_runs(runs, all_bold):
             mark = ('**' if bold else '') + ('*' if r['italic'] else '')
             lead, mid, trail = re.match(r'(\s*)(.*?)(\s*)$', core, re.S).groups()
             core = f'{lead}{mark}{mid}{mark[::-1]}{trail}' if mid else core
+        tag = 'sup' if r.get('sup') or r.get('vert') == 'superscript' else 'sub' if r.get('vert') == 'subscript' else None
+        if tag and core.strip():
+            core = f'<{tag}>{core}</{tag}>'        # Markdown has no superscript; HTML is allowed
         parts.append(core)
     return re.sub(r'\s+', ' ', ''.join(parts)).strip()
 

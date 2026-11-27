@@ -145,7 +145,8 @@ class Styles:
         return None
 
     def resolve(self, run_rpr, para):
-        """{'font', 'size' (half-points), 'bold', 'italic'} of a run in a paragraph."""
+        """{'font', 'size' (half-points), 'bold', 'italic', 'vert'} of a run in a paragraph;
+        vert is 'superscript', 'subscript' or None."""
         chain = [run_rpr]
         rstyle = run_rpr.find(q('rStyle')) if run_rpr is not None else None
         if rstyle is not None:
@@ -154,7 +155,7 @@ class Styles:
         pstyle = ppr.find(q('pStyle')) if ppr is not None else None
         chain += list(self._chain(pstyle.get(q('val')) if pstyle is not None else self.default_para))
         chain.append(self.defaults)
-        out = dict(font=None, size=None, bold=None, italic=None)
+        out = dict(font=None, size=None, bold=None, italic=None, vert=None)
         for rpr in chain:
             if rpr is None:
                 continue
@@ -165,8 +166,11 @@ class Styles:
             for key, tag in (('bold', 'b'), ('italic', 'i')):
                 if out[key] is None and rpr.find(q(tag)) is not None:
                     out[key] = _on(rpr.find(q(tag)))
+            if out['vert'] is None and rpr.find(q('vertAlign')) is not None:
+                out['vert'] = rpr.find(q('vertAlign')).get(q('val'), 'baseline')
         out['size'] = out['size'] or 20
         out['bold'], out['italic'] = bool(out['bold']), bool(out['italic'])
+        out['vert'] = out['vert'] if out['vert'] in ('superscript', 'subscript') else None
         return out
 
 

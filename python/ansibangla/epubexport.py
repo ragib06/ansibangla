@@ -47,6 +47,7 @@ table.grid td { border: 1px solid currentColor; }
 td p, td p.c { margin: 0; text-indent: 0; }
 p.l { text-align: left; }
 p.r { text-align: right; }
+sup, sub { line-height: 0; }
 """
 
 XHTML = ('<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE html>\n'

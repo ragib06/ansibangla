@@ -185,6 +185,7 @@ def test_sample_epub(src, tmp_path):
 def _md_words(path):
     t = open(path, encoding='utf-8').read()
     t = re.sub(r'!\[\]\([^)]*\)', ' ', t)                       # picture links
+    t = re.sub(r'</?(sup|sub)>', '', t)                         # inline: part of the word
     t = re.sub(r'<[^>]+>|&emsp;|^#+ ', ' ', t, flags=re.M)
     t = re.sub(r'(?<!\\)\*+', '', t)
     return re.sub(r'\\([\\`*_])', r'\1', t).split()
@@ -334,6 +335,59 @@ def test_table_merged_cells_and_borders(borders, grid, tmp_path):
                     '<tr><td>e</td><td>f</td><td>g</td></tr></table>')
 
 
+def test_superscript_and_subscript_runs(tmp_path):
+    """Superscript and subscript formatting (note numbers typed as superscript text, set on
+    the run or through a character style) reach the e-book, PDF page and Markdown."""
+    from ansibangla import docxrender
+    W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    styles = (f'<w:styles xmlns:w="{W}"><w:style w:type="character" w:styleId="NoteMark">'
+              '<w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style></w:styles>')
+    doc = (f'<w:document xmlns:w="{W}"><w:body><w:p>'
+           '<w:r><w:t>কথা।</w:t></w:r>'
+           '<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:t>২</w:t></w:r>'
+           '<w:r><w:t> H</w:t></w:r><w:r><w:rPr><w:vertAlign w:val="subscript"/></w:rPr><w:t>2</w:t></w:r>'
+           '<w:r><w:t>O আর</w:t></w:r>'
+           '<w:r><w:rPr><w:rStyle w:val="NoteMark"/></w:rPr><w:t>৩</w:t></w:r>'
+           '</w:p></w:body></w:document>')
+    model = docxrender.build_model({'word/document.xml': doc.encode(), 'word/styles.xml': styles.encode()},
+                                   str(tmp_path))
+    runs = model['blocks'][0]['runs']
+    assert [r.get('vert') for r in runs] == [None, 'superscript', None, 'subscript', None, 'superscript']
+    html = re.sub(r' style="[^"]*"', '', docxrender._runs_html(runs, lambda hp: f'{hp}'))
+    assert html == ('<span>কথা।</span><sup><span>২</span></sup><span> H</span><sub><span>2</span></sub>'
+                    '<span>O আর</span><sup><span>৩</span></sup>')
+    assert docxrender._md_runs(runs, False) == 'কথা।<sup>২</sup> H<sub>2</sub>O আর<sup>৩</sup>'
+
+
+def test_epub_keeps_space_of_empty_lines(tmp_path):
+    """Empty paragraphs (how books typed in Word space headings and scene breaks) become
+    space above what follows: a line each, at most two, none at the top of a page."""
+    from ansibangla import docxrender
+    from ansibangla.api import FONT_DIR
+    W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+
+    def p(text, bold=False):
+        rpr = f'<w:rPr>{"<w:b/>" if bold else ""}<w:sz w:val="22"/></w:rPr>'
+        return f'<w:p><w:r>{rpr}<w:t>{text}</w:t></w:r></w:p>'
+    body = ''.join([p(''), p('প্রথম লেখা'), p(''), p('শিরোনাম', bold=True), p('লেখা'),
+                    p(''), p(''), p(''), p('দৃশ্য বদল'), p('শেষ')] + [p('লেখা ' * 10)] * 10)
+    doc = f'<w:document xmlns:w="{W}"><w:body>{body}</w:body></w:document>'
+    model = docxrender.build_model({'word/document.xml': doc.encode()}, str(tmp_path))
+    out = docxrender.export_epub(model, str(tmp_path / 'book.epub'), FONT_DIR)
+    with zipfile.ZipFile(out) as z:
+        x = ''.join(z.read(n).decode('utf-8') for n in z.namelist() if n.startswith('OEBPS/text/'))
+
+    def top(text):
+        m = re.search(r'<(?:p|h2)\b([^>]*)>(?:<[^>]+>)*' + text, x)
+        found = re.search(r'margin(?:-top)?:([\d.]+)em', m.group(1))
+        return float(found.group(1)) if found else 0.0
+    line = top('শিরোনাম')
+    assert top('প্রথম লেখা') == 0                      # page top: no space for the empty line
+    assert line >= 1.3                                  # one empty line: one line of space
+    assert top('দৃশ্য বদল') == pytest.approx(2 * line)   # three empty lines: two at most
+    assert top('শেষ') == 0
+
+
 def test_epub_pages_follow_word_page_breaks(tmp_path):
     """A Word book laid out with page breaks gets a new page at each break, titled by the
     large lines it opens with (bold or not); a page without such lines gets no entry of its
@@ -429,7 +483,7 @@ def test_docx_input_to_pdf_and_epub(src, tmp_path):
         assert sum(len(p.get_images()) for p in pymupdf.open(written['pdf'])) > 0
         assert any('/images/' in n for n in zipfile.ZipFile(written['epub']).namelist())
     # every word of the Markdown is in the e-book, in order
-    body = re.sub(r'</?(span|sup)\b[^>]*>', '', body)        # inline tags join words
+    body = re.sub(r'</?(span|sup|sub)\b[^>]*>', '', body)    # inline tags join words
     epub_words = htmllib.unescape(re.sub(r'<[^>]+>', ' ', body)).split()
     md_words = _md_words(written['md'])
     it = iter(epub_words)
