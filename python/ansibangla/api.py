@@ -79,9 +79,15 @@ def _convert_docx(src, out_dir='.', *, stem=None, formats=DOCX_DEFAULT_FORMATS, 
     Unicode and the bundled fonts embedded), 'pdf' (that document laid out at its page
     size and printed with Chrome), 'html' (that layout as one printable HTML file), 'epub'
     and 'md', written as <stem>_unicode.docx, .pdf, .html, .epub and .md. Returns {format: path}.
+
+    A document already in Unicode Bangla (say a converted file edited afterwards) can be
+    made into pdf, html, epub and md as it is; asking for docx from it is an error, as
+    there is nothing to convert.
     """
     formats = _check_formats(formats)
+    from .docxinput import NoSutonnyMJText, has_unicode_bangla, read_package
     from .docxinput import convert_docx as _convert
+    given_stem = stem
     stem = stem or os.path.splitext(os.path.basename(src))[0]
     os.makedirs(out_dir, exist_ok=True)
     base = os.path.join(out_dir, f'{stem}_unicode')
@@ -98,6 +104,18 @@ def _convert_docx(src, out_dir='.', *, stem=None, formats=DOCX_DEFAULT_FORMATS, 
     font_dir = font_dir or FONT_DIR
     try:
         files = _convert(src, out_docx, font_dir, scale=scale)
+    except NoSutonnyMJText:
+        files = read_package(src)
+        if not has_unicode_bangla(files):
+            raise ValueError('no SutonnyMJ or Unicode Bangla text found in this document') from None
+        if 'docx' in formats:
+            others = ', '.join(f for f in FORMATS if f != 'docx')
+            raise ValueError(f'this document is already in Unicode, so there is nothing to convert '
+                             f'to .docx; ask for {others} instead') from None
+        if not given_stem and stem.endswith('_unicode'):
+            # an earlier output, edited: book_unicode.docx gives book_unicode.epub
+            base = os.path.join(out_dir, stem)
+            img_name = f'{stem}_images'
     finally:
         if tmp_docx:
             os.remove(tmp_docx)

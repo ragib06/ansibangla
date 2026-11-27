@@ -22,6 +22,10 @@ from .blocks import despace, plain_line
 from .pdfbuild import FONT_FILES, PICTURE_FRAME
 
 BN_FONT = 'Noto Serif Bengali W94'      # family name inside FONT_FILES (see tools/make_fonts.py)
+# Word fills page-number fields with the digits 0-9 in any language; SutonnyMJ drew them as
+# Bangla digits. This tiny family does the same (0-9 drawn as ০-৯), for page numbers only.
+DIGITS_FONT = 'Noto Serif Bengali W94 Digits'
+DIGITS_FILES = ('NotoSerifBengaliW94Digits-Regular.ttf', 'NotoSerifBengaliW94Digits-Bold.ttf')
 LATIN_FONT = 'Times New Roman'
 ASCENT = 0.78           # share of an exact line height above the baseline
 EMU = 12700             # EMU per pt
@@ -77,12 +81,21 @@ def _extent(block, lh):
 
 # ---------------------------------------------------------------- runs
 
-def _rpr(bengali, size, bold=False, italic=False, spacing=0):
-    return '<w:rPr>' + _rpr_inner(bengali, size, bold, italic, spacing) + '</w:rPr>'
+def embedded_fonts(font_dir):
+    """The font families to embed in a .docx: [(family, [regular file, bold file])], the
+    Bengali text font and, when font_dir has it, the page-number digits font."""
+    fonts = [(BN_FONT, list(FONT_FILES))]
+    if all(os.path.exists(os.path.join(font_dir, f)) for f in DIGITS_FILES):
+        fonts.append((DIGITS_FONT, list(DIGITS_FILES)))
+    return fonts
 
 
-def _rpr_inner(bengali, size, bold=False, italic=False, spacing=0):
-    font = BN_FONT if bengali else LATIN_FONT
+def _rpr(bengali, size, bold=False, italic=False, spacing=0, font=None):
+    return '<w:rPr>' + _rpr_inner(bengali, size, bold, italic, spacing, font) + '</w:rPr>'
+
+
+def _rpr_inner(bengali, size, bold=False, italic=False, spacing=0, font=None):
+    font = font or (BN_FONT if bengali else LATIN_FONT)
     hp = max(2, int(size * 2 + 1e-6))             # half-points, rounded down: never wider than the source
     out = [f'<w:rFonts w:ascii="{font}" w:hAnsi="{font}" w:cs="{font}" w:eastAsia="{font}"/>']
     if bold:
@@ -247,18 +260,32 @@ def _settings():
             'w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>')
 
 
-def _font_table(keys):
-    embeds = ''.join(f'<w:{tag} r:id="rIdFont{k}" w:fontKey="{key}"/>'
-                     for k, (tag, key) in enumerate(zip(('embedRegular', 'embedBold'), keys), 1))
+def font_entries(fonts, keys, rid_prefix):
+    """<w:font> entries for the fonts table, each family with its regular and bold files
+    embedded. keys: one obfuscation key per file, in order; relationship ids are
+    rid_prefix + 1, 2, ... in the same order."""
+    out, k = [], 0
+    for family, names in fonts:
+        embeds = ''
+        for tag in ('embedRegular', 'embedBold')[:len(names)]:
+            k += 1
+            embeds += f'<w:{tag} r:id="{rid_prefix}{k}" w:fontKey="{keys[k - 1]}"/>'
+        out.append(f'<w:font w:name="{family}"><w:charset w:val="00"/><w:family w:val="roman"/>'
+                   f'<w:pitch w:val="variable"/>{embeds}</w:font>')
+    return ''.join(out)
+
+
+def _font_table(fonts, keys):
     return (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:fonts {NS}>'
-            f'<w:font w:name="{BN_FONT}"><w:charset w:val="00"/><w:family w:val="roman"/>'
-            f'<w:pitch w:val="variable"/>{embeds}</w:font>'
+            + font_entries(fonts, keys, 'rIdFont') +
             f'<w:font w:name="{LATIN_FONT}"><w:charset w:val="00"/><w:family w:val="roman"/>'
             '<w:pitch w:val="variable"/></w:font></w:fonts>')
 
 
-def _footer(layout, size):
-    rpr = _rpr(True, size * layout.scale)
+def _footer(layout, size, digits_font=None):
+    """A centred page-number field. With digits_font (when the source printed its page
+    numbers in SutonnyMJ, as Bangla digits) the numbers stay Bangla in Word too."""
+    rpr = _rpr(True, size * layout.scale, font=digits_font)
     return (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr {NS}>'
             f'<w:p><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="center"/></w:pPr>'
             f'<w:r>{rpr}<w:fldChar w:fldCharType="begin"/></w:r>'
@@ -292,14 +319,18 @@ def export_docx(doc, layout, blocks, out_path, font_dir):
     bottom_text = max(e[3] for e in extents) if extents else layout.foot_y
     left_margin, right_margin = layout.body_l, layout.page_w - layout.body_r
 
+    fonts = embedded_fonts(font_dir)
     nums = [b for b in blocks if b['kind'] == 'num']
     first_num, num_size, footer_dist = None, layout.body_size * 0.8, layout.page_h - layout.foot_y
+    digits_font = None
     if nums:
         line = nums[0]['lines'][0]
         n = _bn_number(plain_line(line))
         if n is not None:
             first_num = n - nums[0]['page']           # number the source would give page 1
         num_size = line['mj_size'] or line['size']
+        if line['mj_size'] and any(f == DIGITS_FONT for f, _ in fonts):
+            digits_font = DIGITS_FONT                 # printed in SutonnyMJ: Bangla digits
         footer_dist = layout.page_h - line['base'] - 0.3 * num_size
     # Let text run down to just above the page number: about a line of room to spare, so
     # a page whose Unicode text wraps to one more line than its source still fits.
@@ -402,7 +433,8 @@ def export_docx(doc, layout, blocks, out_path, font_dir):
                 + (f'<w:background w:color="{layout.page_bg.lstrip("#")}"/>' if layout.page_bg != '#FFFFFF' else '') +
                 f'<w:body>{"".join(body)}{sect}</w:body></w:document>')
 
-    keys = ['{' + str(uuid.uuid4()).upper() + '}' for _ in FONT_FILES]
+    font_files = [name for _, names in fonts for name in names]
+    keys = ['{' + str(uuid.uuid4()).upper() + '}' for _ in font_files]
     rels = [f'<Relationship Id="rIdStyles" Type="{REL}/styles" Target="styles.xml"/>',
             f'<Relationship Id="rIdSettings" Type="{REL}/settings" Target="settings.xml"/>',
             f'<Relationship Id="rIdFonts" Type="{REL}/fontTable" Target="fontTable.xml"/>',
@@ -410,7 +442,7 @@ def export_docx(doc, layout, blocks, out_path, font_dir):
     rels += [f'<Relationship Id="{rid}" Type="{REL}/image" Target="media/{escape(name)}"/>'
              for rid, name, _ in media]
     font_rels = ''.join(f'<Relationship Id="rIdFont{k}" Type="{REL}/font" Target="fonts/font{k}.odttf"/>'
-                        for k in range(1, len(FONT_FILES) + 1))
+                        for k in range(1, len(font_files) + 1))
     ct_main = 'application/vnd.openxmlformats-officedocument.wordprocessingml'
     content_types = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -442,13 +474,13 @@ def export_docx(doc, layout, blocks, out_path, font_dir):
         z.writestr('word/document.xml', document)
         z.writestr('word/styles.xml', _styles(layout, layout.body_size))
         z.writestr('word/settings.xml', _settings())
-        z.writestr('word/fontTable.xml', _font_table(keys))
-        z.writestr('word/footer1.xml', _footer(layout, num_size))
+        z.writestr('word/fontTable.xml', _font_table(fonts, keys))
+        z.writestr('word/footer1.xml', _footer(layout, num_size, digits_font))
         z.writestr('word/_rels/document.xml.rels', relationships(rels))
         z.writestr('word/_rels/fontTable.xml.rels', relationships([font_rels]))
         for rid, name, path in media:
             z.write(path, f'word/media/{name}')
-        for k, (fname, key) in enumerate(zip(FONT_FILES, keys), 1):
+        for k, (fname, key) in enumerate(zip(font_files, keys), 1):
             with open(os.path.join(font_dir, fname), 'rb') as fh:
                 z.writestr(f'word/fonts/font{k}.odttf', _obfuscate(fh.read(), key))
     return out_path

@@ -10,9 +10,12 @@ setup, pictures, tables, headers and footers) and changes only SutonnyMJ text:
 - Each SutonnyMJ run gets the bundled Unicode font. Bengali Unicode is a complex script
   in Word, laid out with the complex-script size, bold and italic, so those are set to
   match the run's own.
+- Page-number fields set in SutonnyMJ get a digits-only font that draws 0-9 as ০-৯:
+  Word fills those fields with 0-9, which SutonnyMJ drew as Bangla digits.
 - The bundled fonts are embedded.
 
-Markdown, PDF and EPUB are made from the converted document by docxrender.
+Markdown, PDF and EPUB are made from the converted document by docxrender (or from a
+document already in Unicode, which needs no conversion).
 """
 import io
 import os
@@ -23,8 +26,7 @@ import xml.etree.ElementTree as ET
 
 from ._common import _needs_join, is_mj
 from .bijoy import convert as bijoy_convert
-from .docxexport import BN_FONT, _obfuscate
-from .pdfbuild import FONT_FILES
+from .docxexport import BN_FONT, DIGITS_FONT, _obfuscate, embedded_fonts, font_entries
 
 W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
@@ -364,8 +366,42 @@ class _Converter:
             self._to_unicode(run, para)
 
 
-def _convert_part(xml_bytes, styles, scale=1.0):
-    """Convert one WordprocessingML part. Returns (new bytes, runs converted)."""
+PAGE_FIELDS = {'PAGE', 'NUMPAGES', 'SECTIONPAGES'}
+
+
+def _page_field_runs(root):
+    """Runs that make up a page-number field: a simple field, or a complex one from its
+    begin mark to its end mark (fields can nest; a run belongs to every open field)."""
+    def is_page(instr):
+        words = (instr or '').split()
+        return bool(words) and words[0].upper() in PAGE_FIELDS
+
+    out, stack = [], []
+    for el in root.iter():
+        if _local(el) == 'fldSimple' and is_page(el.get(q('instr'))):
+            out += list(el.iter(q('r')))
+        if _local(el) != 'r':
+            continue
+        for frame in stack:
+            frame['runs'].append(el)
+        mark = el.find(q('fldChar'))
+        kind = mark.get(q('fldCharType')) if mark is not None else None
+        if kind == 'begin':
+            stack.append(dict(instr='', runs=[el]))
+        for instr in el.findall(q('instrText')):
+            if stack:
+                stack[-1]['instr'] += instr.text or ''
+        if kind == 'end' and stack:
+            frame = stack.pop()
+            if is_page(frame['instr']):
+                out += frame['runs']
+    return out
+
+
+def _convert_part(xml_bytes, styles, scale=1.0, digits_font=None):
+    """Convert one WordprocessingML part. Returns (new bytes, runs converted).
+    With digits_font, page-number fields set in SutonnyMJ get that font, so Word's
+    0-9 still show as ০-৯ (SutonnyMJ drew them so)."""
     text = xml_bytes.decode('utf-8')
     for _, (prefix, uri) in ET.iterparse(io.BytesIO(xml_bytes), events=('start-ns',)):
         try:
@@ -375,6 +411,14 @@ def _convert_part(xml_bytes, styles, scale=1.0):
     root = ET.fromstring(xml_bytes)
     conv = _Converter(styles, scale)
     parents = {c: p for p in root.iter() for c in p}
+
+    def para_of(el):
+        while el is not None and _local(el) != 'p':
+            el = parents.get(el)
+        return el
+
+    # decided before converting: afterwards every SutonnyMJ run has the Unicode font
+    page_runs = [r for r in _page_field_runs(root) if conv.is_mj_run(r, para_of(r))] if digits_font else []
     for el in list(root.iter()):
         if any(_local(c) == 'r' for c in el):
             para = el
@@ -396,6 +440,10 @@ def _convert_part(xml_bytes, styles, scale=1.0):
         # height would crop the picture to it
         if not any(_local(e) in ('pict', 'drawing', 'object') for e in para.iter()):
             _exact_lines(para, styles, size)
+    for run in page_runs:
+        fonts = run.find(q('rPr')).find(q('rFonts'))      # set by the conversion just now
+        for attr in ('ascii', 'hAnsi', 'cs', 'eastAsia'):
+            fonts.set(q(attr), digits_font)
     out = ET.tostring(root, encoding='unicode')
     # keep the original root tag: it declares every prefix that mc:Ignorable names
     original_root = re.search(r'<[A-Za-z][^>]*>', text[text.index('?>') + 2:] if text.startswith('<?') else text)
@@ -430,25 +478,25 @@ def _convert_styles(xml_bytes, scale=1.0):
 
 # ---------------------------------------------------------------- fonts
 
-def _embed_fonts(files, font_dir):
-    """Add the bundled fonts to the package, embedded and obfuscated as Word does."""
-    keys = ['{' + str(uuid.uuid4()).upper() + '}' for _ in FONT_FILES]
-    ids = [f'rIdSmFont{k}' for k in range(1, len(FONT_FILES) + 1)]
-    for k, (name, key) in enumerate(zip(FONT_FILES, keys), 1):
+def _embed_fonts(files, font_dir, fonts):
+    """Add the bundled fonts to the package, embedded and obfuscated as Word does.
+    fonts: [(family, [regular file, bold file])] from docxexport.embedded_fonts."""
+    names = [name for _, family_files in fonts for name in family_files]
+    keys = ['{' + str(uuid.uuid4()).upper() + '}' for _ in names]
+    ids = [f'rIdSmFont{k}' for k in range(1, len(names) + 1)]
+    for k, (name, key) in enumerate(zip(names, keys), 1):
         with open(os.path.join(font_dir, name), 'rb') as fh:
             files[f'word/fonts/ansibangla{k}.odttf'] = _obfuscate(fh.read(), key)
 
     table = files.get('word/fontTable.xml', b'').decode('utf-8')
-    entry = (f'<w:font w:name="{BN_FONT}"><w:charset w:val="00"/><w:family w:val="roman"/>'
-             f'<w:pitch w:val="variable"/>'
-             f'<w:embedRegular r:id="{ids[0]}" w:fontKey="{keys[0]}"/>'
-             f'<w:embedBold r:id="{ids[1]}" w:fontKey="{keys[1]}"/></w:font>')
+    entry = font_entries(fonts, keys, 'rIdSmFont')
     if not table:
         table = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                  f'<w:fonts xmlns:w="{W}" xmlns:r="{R}"></w:fonts>')
     if 'xmlns:r=' not in table[:table.index('>', table.index('<w:fonts')) + 1]:
         table = table.replace('<w:fonts ', f'<w:fonts xmlns:r="{R}" ', 1)
-    table = re.sub(rf'<w:font w:name="{re.escape(BN_FONT)}">.*?</w:font>', '', table, flags=re.S)
+    for family, _ in fonts:
+        table = re.sub(rf'<w:font w:name="{re.escape(family)}">.*?</w:font>', '', table, flags=re.S)
     files['word/fontTable.xml'] = table.replace('</w:fonts>', entry + '</w:fonts>').encode('utf-8')
 
     rels_name = 'word/_rels/fontTable.xml.rels'
@@ -501,29 +549,47 @@ def _add_override(files, part, content_type):
 
 # ---------------------------------------------------------------- entry point
 
+class NoSutonnyMJText(ValueError):
+    """The document has no SutonnyMJ text (it may already be Unicode)."""
+
+
+def read_package(src):
+    """A .docx as {part name: bytes}."""
+    with zipfile.ZipFile(src) as z:
+        return {i.filename: z.read(i.filename) for i in z.infolist()}
+
+
+def has_unicode_bangla(files):
+    """Whether the document's text parts hold Unicode Bengali letters."""
+    return any(re.search('[ঀ-৿]', files[name].decode('utf-8', 'replace'))
+               for name in files if PARTS.match(name))
+
+
 def convert_docx(src, out_docx, font_dir, scale=0.9):
     """Convert a SutonnyMJ .docx and write it to out_docx. SutonnyMJ text
     is set at scale times its size, which matches its look (SutonnyMJ draws letters
     smaller than Unicode fonts at the same size). Returns the converted package as
-    {part name: bytes}."""
+    {part name: bytes}. Raises NoSutonnyMJText, writing nothing, when there is no
+    SutonnyMJ text to convert."""
     with zipfile.ZipFile(src) as z:
         infos = z.infolist()
         files = {i.filename: z.read(i.filename) for i in infos}
+    fonts = embedded_fonts(font_dir)
+    digits_font = DIGITS_FONT if any(f == DIGITS_FONT for f, _ in fonts) else None
     styles = Styles(files.get('word/styles.xml'), files.get('word/theme/theme1.xml'))
     converted = 0
     for name in list(files):
         if PARTS.match(name):
-            files[name], n = _convert_part(files[name], styles, scale)
+            files[name], n = _convert_part(files[name], styles, scale, digits_font)
             converted += n
+    if not converted:
+        raise NoSutonnyMJText('no SutonnyMJ text found in this document')
     if 'word/styles.xml' in files:
         files['word/styles.xml'] = _convert_styles(files['word/styles.xml'], scale)
-    _embed_fonts(files, font_dir)
+    _embed_fonts(files, font_dir, fonts)
 
     order = [i.filename for i in infos] + [n for n in files if n not in {i.filename for i in infos}]
     with zipfile.ZipFile(out_docx, 'w', zipfile.ZIP_DEFLATED) as z:
         for name in order:
             z.writestr(name, files[name])
-
-    if not converted:
-        raise ValueError('no SutonnyMJ text found in this document')
     return files

@@ -12,10 +12,16 @@ The instances get their own family name, so Word and LibreOffice never swap in a
 installed Noto Serif Bengali of another width. They also centre chandrabindu over the
 join of a letter with া, ো or ৌ, as SutonnyMJ does (see centre_candrabindu).
 
+It also builds a tiny digits-only family, Noto Serif Bengali W94 Digits, that draws the
+digits 0-9 as ০-৯ (see make_digits). Word fills page-number fields with 0-9 whatever the
+language, and SutonnyMJ drew those as Bangla digits; the converter sets page-number
+fields in this font so they stay Bangla.
+
 Needs fontTools (pip install fonttools); the converter itself does not.
 
     python tools/make_fonts.py              # downloads the variable font from google/fonts
     python tools/make_fonts.py NotoSerifBengali[wdth,wght].ttf
+    python tools/make_fonts.py --digits     # only the digits fonts, from the bundled fonts
 """
 import os
 import sys
@@ -28,18 +34,20 @@ URL = ('https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifbengali
        'NotoSerifBengali%5Bwdth,wght%5D.ttf')
 WIDTH = 94
 FAMILY = 'Noto Serif Bengali W94'
+DIGITS_FAMILY = 'Noto Serif Bengali W94 Digits'
+BN_DIGITS = range(0x09E6, 0x09F0)              # ০-৯
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'ansibangla', 'fonts')
 STYLES = (('Regular', 400), ('Bold', 700))
 
 
-def rename(font, style):
-    full = f'{FAMILY} {style}' if style != 'Regular' else FAMILY
-    ps = f'{FAMILY.replace(" ", "")}-{style}'
+def rename(font, style, family=FAMILY):
+    full = f'{family} {style}' if style != 'Regular' else family
+    ps = f'{family.replace(" ", "")}-{style}'
     names = font['name']
     for rec in list(names.names):
         if rec.nameID in (16, 17, 21, 22, 25):      # typographic / WWS / variations names
             names.removeNames(nameID=rec.nameID)
-    for name_id, value in ((1, FAMILY), (2, style), (3, f'{ps};{WIDTH}'), (4, full), (6, ps)):
+    for name_id, value in ((1, family), (2, style), (3, f'{ps};{WIDTH}'), (4, full), (6, ps)):
         names.setName(value, name_id, 3, 1, 0x409)
         names.setName(value, name_id, 1, 0, 0)
     os2 = font['OS/2']
@@ -151,7 +159,35 @@ def centre_candrabindu(font, step=10):
     return sum(len(b) for b in by_dx.values())
 
 
+def make_digits(style):
+    """The digits family for one style, cut from the bundled font of that style: only
+    the space and the Bangla digit glyphs, reached from both ০-৯ and 0-9. A few KB, so
+    it costs nothing to embed in every .docx."""
+    from fontTools import subset
+
+    font = TTFont(os.path.join(OUT_DIR, f'{FAMILY.replace(" ", "")}-{style}.ttf'))
+    options = subset.Options()
+    options.layout_features = []                # digits need no shaping
+    options.name_IDs = ['*']
+    options.notdef_outline = True
+    sub = subset.Subsetter(options)
+    sub.populate(unicodes=[0x20, *BN_DIGITS])
+    sub.subset(font)
+    for table in font['cmap'].tables:
+        if table.isUnicode():
+            for k, cp in enumerate(BN_DIGITS):
+                table.cmap[0x30 + k] = table.cmap[cp]
+    rename(font, style, DIGITS_FAMILY)
+    out = os.path.join(OUT_DIR, f'{DIGITS_FAMILY.replace(" ", "")}-{style}.ttf')
+    font.save(out)
+    print(out, os.path.getsize(out), 'bytes')
+
+
 def main():
+    if sys.argv[1:] == ['--digits']:
+        for style, _ in STYLES:
+            make_digits(style)
+        return
     src = sys.argv[1] if len(sys.argv) > 1 else None
     if src is None:
         src = os.path.join(OUT_DIR, '_NotoSerifBengali-VF.ttf')
@@ -164,6 +200,7 @@ def main():
             out =os.path.join(OUT_DIR, f'{FAMILY.replace(" ", "")}-{style}.ttf')
             font.save(out)
             print(out)
+            make_digits(style)
     finally:
         if len(sys.argv) == 1:
             os.remove(src)

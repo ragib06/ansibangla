@@ -7,6 +7,7 @@ import contextlib
 import io
 import os
 import shutil
+import sys
 import zipfile
 
 from ansibangla import api
@@ -31,9 +32,22 @@ def run(name, data, formats, keep_latin=None):
         fh.write(bytes(data))
 
     err = io.StringIO()
+    keep = list(keep_latin) if keep_latin else None
     with contextlib.redirect_stderr(err):
-        written = api.convert_file(src, out_dir, formats=list(formats),
-                                   keep_latin=list(keep_latin) if keep_latin else None)
+        try:
+            written = api.convert_file(src, out_dir, formats=list(formats), keep_latin=keep)
+        except ValueError as exc:
+            # a Word file already in Unicode (say, an edited earlier output) has no Word
+            # file to make, but can still become a PDF, e-book or Markdown
+            if 'already in Unicode' not in str(exc):
+                raise
+            rest = [f for f in formats if f != 'docx']
+            if not rest:
+                raise ValueError('This Word file is already in Unicode. Choose PDF, EPUB or '
+                                 'Markdown to make those from it.') from None
+            written = api.convert_file(src, out_dir, formats=rest, keep_latin=keep)
+            print('note: this Word file is already in Unicode, so no new Word file was made',
+                  file=sys.stderr)
 
     files = []
     for fmt, path in written.items():

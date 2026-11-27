@@ -20,7 +20,13 @@ footers are left as they are; text is set at `--scale` of its size, with exact l
 spacing equal to what SutonnyMJ gave, so lines and pages stay where they were. PDF output
 lays that document out at its page size and margins (printed with Chrome; headers,
 footers and footnotes are not drawn). EPUB output starts a chapter at each large bold
-heading, with bold headings at body size as sections.
+heading, with bold headings at body size as sections. Page numbers that were in SutonnyMJ
+stay in Bangla digits (১, ২, ৩), in Word documents made from PDFs too.
+
+**Already-Unicode Word files.** A `.docx` that is already in Unicode Bangla, such as a
+converted file you have since edited, can be made into PDF, HTML, EPUB or Markdown as it
+is: `ansibangla book_unicode.docx -f epub` writes `book_unicode.epub`. Asking it for a
+`.docx` is an error, as there is nothing to convert.
 
 The outputs, for PDF or Word input:
 
@@ -94,6 +100,7 @@ ansibangla book.pdf -f epub --title 'বইয়ের নাম'   # e-book wi
 ansibangla a.pdf b.pdf -f md                 # several files, Markdown only
 ansibangla story.docx -o out/                # Word input: Unicode .docx
 ansibangla story.docx -f pdf epub            # Word input: PDF + e-book
+ansibangla story_unicode.docx -f epub        # an edited Unicode .docx: e-book
 ansibangla book.pdf --scale 0.85
 ansibangla book.pdf --chrome /path/to/chrome
 python -m ansibangla book.pdf                # same, without the installed script
@@ -251,5 +258,12 @@ instances have their own family name, so an installed Noto Serif Bengali of anot
 width is never used in their place. One placement rule is also changed. With া, ো or
 ৌ, Noto puts chandrabindu far left (দাঁ) or past the syllable (পৌঁ). The bundled fonts
 centre it over the join between the letter and its vowel stroke, as SutonnyMJ does.
-Everywhere else Noto's placement is kept. To rebuild them: `pip install fonttools && python
-tools/make_fonts.py`.
+Everywhere else Noto's placement is kept.
+
+Noto Serif Bengali W94 Digits (Regular and Bold, about 4 KB each) holds only the Bangla
+digits, drawn for both ০-৯ and 0-9. Word fills page-number fields with 0-9 in any
+language, and SutonnyMJ drew those as Bangla digits; Word output sets page numbers in this
+font so they stay Bangla. It is embedded in the `.docx` like the main fonts.
+
+To rebuild the fonts: `pip install fonttools && python tools/make_fonts.py`
+(`python tools/make_fonts.py --digits` rebuilds only the digits fonts from the bundled ones).

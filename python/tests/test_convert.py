@@ -230,6 +230,91 @@ def test_docx_input_rejects_unknown_format(tmp_path):
         convert_docx('missing.docx', tmp_path, formats=('txt',))
 
 
+def test_page_field_runs():
+    """Runs of PAGE / NUMPAGES fields are found, simple or complex, nested or not; runs
+    of other fields and plain text are not."""
+    import xml.etree.ElementTree as ET
+    from ansibangla.docxinput import W, _page_field_runs
+
+    def r(inner, name):
+        return f'<w:r><w:rPr><w:rStyle w:val="{name}"/></w:rPr>{inner}</w:r>'
+
+    begin, sep, end = ('<w:fldChar w:fldCharType="begin"/>', '<w:fldChar w:fldCharType="separate"/>',
+                       '<w:fldChar w:fldCharType="end"/>')
+    body = (r('<w:t>page </w:t>', 'text')
+            + r(begin, 'p1') + r('<w:instrText> PAGE \\* MERGEFORMAT </w:instrText>', 'p2')
+            + r(sep, 'p3') + r('<w:t>7</w:t>', 'p4') + r(end, 'p5')
+            + r(begin, 'd1') + r('<w:instrText> DATE </w:instrText>', 'd2') + r(sep, 'd3')
+            + r('<w:t>today</w:t>', 'd4') + r(end, 'd5')
+            + f'<w:fldSimple w:instr=" NUMPAGES ">{r("<w:t>9</w:t>", "s1")}</w:fldSimple>'
+            # a PAGE field nested inside an IF field: only the inner field's runs
+            + r(begin, 'if1') + r('<w:instrText> IF </w:instrText>', 'if2')
+            + r(begin, 'n1') + r('<w:instrText>PAGE</w:instrText>', 'n2') + r(end, 'n3')
+            + r('<w:instrText> > 1 "x" </w:instrText>', 'if3') + r(end, 'if4'))
+    root = ET.fromstring(f'<w:p xmlns:w="{W}">{body}</w:p>')
+    found = [run.find(f'{{{W}}}rPr/{{{W}}}rStyle').get(f'{{{W}}}val') for run in _page_field_runs(root)]
+    assert sorted(found) == sorted(['p1', 'p2', 'p3', 'p4', 'p5', 's1', 'n1', 'n2', 'n3'])
+
+
+@pytest.mark.skipif(not DOCX_SAMPLES, reason='no sample .docx files in sample/')
+@pytest.mark.parametrize('src', DOCX_SAMPLES)
+def test_docx_page_numbers_stay_bangla(src, tmp_path):
+    """Word fills page-number fields with 0-9; in SutonnyMJ those showed as ০-৯. Fields
+    that were in SutonnyMJ get the digits font (0-9 drawn as ০-৯), embedded in the file,
+    and nothing else does."""
+    from ansibangla import convert_docx
+    from ansibangla.docxexport import DIGITS_FONT
+    out = convert_docx(src, tmp_path, formats=('docx',))['docx']
+    with zipfile.ZipFile(out) as z:
+        parts = {n: z.read(n).decode('utf-8') for n in z.namelist() if n.endswith('.xml')}
+    with zipfile.ZipFile(src) as z:
+        mj_page_field = any('SutonnyMJ' in x and re.search(r'instrText[^>]*>\s*PAGE\b', x)
+                            for n in z.namelist() if re.match(r'word/(header|footer)\d*\.xml', n)
+                            for x in [z.read(n).decode('utf-8')])
+    assert f'w:name="{DIGITS_FONT}"' in parts['word/fontTable.xml']          # embedded
+    assert DIGITS_FONT not in parts['word/document.xml']                      # body text untouched
+    in_footers = any(DIGITS_FONT in x for n, x in parts.items() if re.match(r'word/(header|footer)\d*\.xml', n))
+    assert in_footers == mj_page_field
+
+
+@pytest.mark.skipif(not SAMPLES, reason='no sample PDFs in sample/')
+@pytest.mark.parametrize('src', SAMPLES)
+def test_pdf_to_docx_page_numbers_stay_bangla(src, tmp_path):
+    """A source that prints its page numbers in SutonnyMJ gets a page-number footer in the
+    digits font, so Word's numbers show as ০, ১, ২ like the source's."""
+    from ansibangla.docxexport import DIGITS_FONT
+    out = convert_pdf(src, tmp_path, formats=('docx',))['docx']
+    with zipfile.ZipFile(out) as z:
+        if 'footerReference' not in z.read('word/document.xml').decode('utf-8'):
+            pytest.skip('this source prints no page numbers')
+        assert DIGITS_FONT in z.read('word/footer1.xml').decode('utf-8')
+        assert f'w:name="{DIGITS_FONT}"' in z.read('word/fontTable.xml').decode('utf-8')
+
+
+@pytest.mark.skipif(not DOCX_SAMPLES, reason='no sample .docx files in sample/')
+@pytest.mark.parametrize('src', DOCX_SAMPLES)
+def test_unicode_docx_makes_the_same_ebook(src, tmp_path):
+    """A converted .docx (say, edited afterwards) can be made into an e-book as it is, and
+    gives the same e-book and Markdown as converting the SutonnyMJ original directly. Asking
+    it for a .docx is a clear error that writes nothing."""
+    from ansibangla import convert_docx, convert_file
+    direct = convert_docx(src, tmp_path / 'direct', formats=('epub', 'md'))
+    uni = convert_docx(src, tmp_path / 'uni', formats=('docx',))['docx']
+    again = convert_docx(uni, tmp_path / 'again', formats=('epub', 'md'))
+    assert os.path.basename(again['epub']) == os.path.basename(direct['epub'])   # no _unicode_unicode
+    assert open(again['md'], encoding='utf-8').read() == open(direct['md'], encoding='utf-8').read()
+
+    def chapters(path):
+        with zipfile.ZipFile(path) as z:
+            return [z.read(n) for n in sorted(z.namelist()) if n.startswith('OEBPS/text/')]
+    assert chapters(again['epub']) == chapters(direct['epub'])
+
+    before = set(os.listdir(tmp_path / 'again'))
+    with pytest.raises(ValueError, match='already in Unicode'):
+        convert_file(uni, tmp_path / 'again')                   # default output for .docx is docx
+    assert set(os.listdir(tmp_path / 'again')) == before
+
+
 @pytest.mark.skipif(not DOCX_SAMPLES, reason='no sample .docx files in sample/')
 @pytest.mark.parametrize('src', DOCX_SAMPLES)
 def test_docx_input_to_pdf_and_epub(src, tmp_path):
