@@ -14,6 +14,8 @@ import re
 import uuid
 import zipfile
 
+import pymupdf as fitz
+
 from ._common import is_mj, span_text
 from .blocks import despace, plain_line
 from .docxexport import _bn_number, _line_heights
@@ -323,7 +325,64 @@ def _centred_html(block, layout):
     return _line_html(line, layout)
 
 
+# Pictures in an e-book need not be bigger than a tablet screen. Books typeset for print
+# carry covers at print resolution (3600 x 6000) and photographs saved losslessly as PNG,
+# which make the e-book about as big as the Word file it came from.
+EPUB_MAX_W, EPUB_MAX_H = 1600, 2560      # the usual e-book limit, sharp on high-density tablets
+JPEG_QUALITY = 85                        # no visible loss at reading size
+
+
+def _web_image(path):
+    """A picture ready for the e-book: (bytes, extension). Scaled down to fit
+    EPUB_MAX_W x EPUB_MAX_H; photographs (many colours, nothing transparent) saved as
+    JPEG, other pictures as PNG so diagrams and transparency stay exact. Whichever is
+    smaller of that and the original file is used; a picture that cannot be read is
+    kept as it is."""
+    with open(path, 'rb') as fh:
+        data = fh.read()
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in ('.png', '.jpg', '.jpeg'):
+        return data, ext                         # gif (may be animated), svg, webp: as they are
+    try:
+        pix = fitz.Pixmap(data)
+        transparent = False
+        if pix.alpha:
+            transparent = min(pix.samples[pix.n - 1::pix.n]) < 255
+            if not transparent:
+                pix = fitz.Pixmap(pix, 0)        # an alpha channel that hides nothing
+        if pix.colorspace is not None and pix.colorspace.n not in (1, 3):
+            pix = fitz.Pixmap(fitz.csRGB, pix)   # CMYK and the like
+        scale = min(1.0, EPUB_MAX_W / pix.width, EPUB_MAX_H / pix.height)
+        if scale < 1:
+            pix = fitz.Pixmap(pix, max(1, round(pix.width * scale)), max(1, round(pix.height * scale)), None)
+        if not transparent and pix.color_count() > 256:
+            new, new_ext = pix.tobytes('jpg', jpg_quality=JPEG_QUALITY), '.jpg'
+        else:
+            new, new_ext = pix.tobytes('png'), '.png'
+    except Exception:                            # not a picture PyMuPDF can read
+        return data, ext
+    return (new, new_ext) if len(new) < len(data) else (data, ext)
+
+
 def _write_package(out_path, book, images, cover, title, font_dir, line_height):
+    # pictures first: a photograph saved as PNG becomes a .jpg, so its name changes
+    shrunk, renamed, taken = [], {}, set()
+    for name, path in images:
+        data, ext = _web_image(path)
+        stem = os.path.splitext(name)[0]
+        new = name if os.path.splitext(name)[1].lower() == ext else stem + ext
+        while new in taken:
+            new = f'{os.path.splitext(new)[0]}_{len(taken)}{ext}'
+        taken.add(new)
+        renamed[name] = new
+        shrunk.append((new, data))
+    if any(old != new for old, new in renamed.items()):
+        for c in book.chapters:
+            c['parts'] = [re.sub(r'(\.\./images/)([^"]+)"', lambda m: m.group(1) + renamed.get(m.group(2), m.group(2)) + '"', p)
+                          for p in c['parts']]
+    images = [(new, None) for new, _ in shrunk]
+    cover = renamed.get(cover, cover)
+
     book_id = f'urn:uuid:{uuid.uuid4()}'
     modified = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     media = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
@@ -403,8 +462,9 @@ def _write_package(out_path, book, images, cover, title, font_dir, line_height):
         z.writestr('OEBPS/style.css', css)
         for name in FONT_FILES:
             z.write(os.path.join(font_dir, name), f'OEBPS/fonts/{name}')
-        for name, path in images:
-            z.write(path, f'OEBPS/images/{name}')
+        for name, data in shrunk:
+            # pictures are compressed already; deflating them again only costs time
+            z.writestr(f'OEBPS/images/{name}', data, compress_type=zipfile.ZIP_STORED)
         for c in book.chapters:
             z.writestr(f'OEBPS/text/{c["file"]}',
                        XHTML.format(title=_esc(c['title']), cls='', body='\n'.join(c['parts'])))

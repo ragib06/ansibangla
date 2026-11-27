@@ -41,7 +41,7 @@ The outputs, for PDF or Word input:
 | `<name>_unicode.md` | `md` | Markdown following the layout: paragraphs, headings, bold and italic runs, centred lines and pictures (saved in `<name>_unicode_images/`). |
 | `<name>_unicode.pdf` | `pdf` | Same page layout in a Unicode Bengali font (Noto Serif Bengali), with pictures and page colour kept. Text is searchable and copyable. |
 | `<name>_unicode.docx` | `docx` | Word document with the source's formatting: page size, margins, page colour, line spacing, justified paragraphs with first-line indents, centred headings, framed pictures, bold and italic, page numbers. One page per source page. Fonts are embedded. |
-| `<name>_unicode.epub` | `epub` | Reflowable EPUB 3 e-book: chapters split at headings, table of contents, justified paragraphs with indents, bold and italic, pictures, and the printed page numbers as a page list. Fonts are embedded. |
+| `<name>_unicode.epub` | `epub` | Reflowable EPUB 3 e-book: chapters split at headings, table of contents, justified paragraphs with indents, bold and italic, pictures, and the printed page numbers as a page list. Fonts are embedded. Pictures are scaled to e-book size (at most 1600 × 2560) and photographs saved as JPEG, so the book stays small (the Word and PDF outputs keep the pictures as they were). |
 | `<name>_unicode.html` | `html` | The PDF's pages as one self-contained HTML file (fonts and pictures embedded). Open it in a browser and print to PDF; no Chrome install is needed. Print it once the page has finished loading, at 100% scale with no margins or headers. |
 
 ## Requirements

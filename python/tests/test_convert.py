@@ -359,6 +359,51 @@ def test_superscript_and_subscript_runs(tmp_path):
     assert docxrender._md_runs(runs, False) == 'কথা।<sup>২</sup> H<sub>2</sub>O আর<sup>৩</sup>'
 
 
+def test_epub_pictures_are_made_small(tmp_path):
+    """Pictures go into the e-book at most EPUB_MAX_W x EPUB_MAX_H: photographs as JPEG,
+    diagrams (few colours) and transparent pictures as PNG, never bigger than before."""
+    import random
+    import pymupdf
+    from ansibangla.epubexport import EPUB_MAX_H, EPUB_MAX_W, _web_image
+    rnd = random.Random(1)
+    # a photograph-like picture at print size, saved losslessly: fine detail everywhere,
+    # which PNG cannot compress
+    w, h = 3000, 2000
+    photo = pymupdf.Pixmap(pymupdf.csRGB, w, h, rnd.randbytes(w * h * 3), False)
+    photo.save(str(tmp_path / 'photo.png'))
+    diagram = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 600, 400), False)
+    diagram.set_rect(diagram.irect, (255, 255, 255))
+    diagram.set_rect(pymupdf.IRect(100, 100, 300, 200), (0, 0, 0))
+    diagram.save(str(tmp_path / 'diagram.png'))
+    glass = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 300, 200), True)
+    glass.set_rect(glass.irect, (200, 30, 30, 120))
+    glass.save(str(tmp_path / 'glass.png'))
+
+    data, ext = _web_image(str(tmp_path / 'photo.png'))
+    pix = pymupdf.Pixmap(data)
+    assert ext == '.jpg' and pix.width <= EPUB_MAX_W and pix.height <= EPUB_MAX_H
+    assert len(data) < os.path.getsize(tmp_path / 'photo.png') / 5
+    data, ext = _web_image(str(tmp_path / 'diagram.png'))
+    assert ext == '.png' and len(data) <= os.path.getsize(tmp_path / 'diagram.png')
+    data, ext = _web_image(str(tmp_path / 'glass.png'))
+    assert ext == '.png' and pymupdf.Pixmap(data).alpha
+
+
+@pytest.mark.skipif(not DOCX_SAMPLES, reason='no sample .docx files in sample/')
+@pytest.mark.parametrize('src', DOCX_SAMPLES)
+def test_epub_picture_links_survive_renaming(src, tmp_path):
+    """A PNG photograph becomes a .jpg in the e-book; every link and the manifest follow."""
+    from ansibangla import convert_docx
+    out = convert_docx(src, tmp_path, formats=('epub',))['epub']
+    with zipfile.ZipFile(out) as z:
+        names = set(z.namelist())
+        text = ''.join(z.read(n).decode('utf-8') for n in names if n.endswith('.xhtml'))
+        opf = z.read('OEBPS/content.opf').decode('utf-8')
+    files = {n[len('OEBPS/images/'):] for n in names if n.startswith('OEBPS/images/')}
+    assert set(re.findall(r'\.\./images/([^"]+)"', text)) <= files
+    assert set(re.findall(r'href="images/([^"]+)"', opf)) == files
+
+
 def test_epub_keeps_space_of_empty_lines(tmp_path):
     """Empty paragraphs (how books typed in Word space headings and scene breaks) become
     space above what follows: a line each, at most two, none at the top of a page."""
