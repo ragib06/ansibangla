@@ -349,12 +349,19 @@ def _write_package(out_path, book, images, cover, title, font_dir, line_height):
            f'<dc:language>bn</dc:language><meta property="dcterms:modified">{modified}</meta>{cover_meta}'
            f'</metadata><manifest>{"".join(manifest)}</manifest><spine toc="ncx">{spine}</spine></package>')
 
+    # a chapter with toc=False (an untitled page, such as a picture page) has no entry of
+    # its own; a section is (id, text) in its chapter's file, or (id, text, file)
+    listed = [c for c in book.chapters if c.get('toc', True)]
+
+    def sub_file(c, s):
+        return s[2] if len(s) > 2 else c['file']
+
     def toc_entry(c):
-        subs = ''.join(f'<li><a href="text/{c["file"]}#{sid}">{_esc(t)}</a></li>' for sid, t in c['subs'])
+        subs = ''.join(f'<li><a href="text/{sub_file(c, s)}#{s[0]}">{_esc(s[1])}</a></li>' for s in c['subs'])
         return (f'<li><a href="text/{c["file"]}">{_esc(c["title"])}</a>'
                 + (f'<ol>{subs}</ol>' if subs else '') + '</li>')
 
-    toc = ''.join(toc_entry(c) for c in book.chapters)
+    toc = ''.join(toc_entry(c) for c in listed)
     page_list = ''.join(f'<li><a href="text/{f}#{pid}">{_esc(label)}</a></li>' for label, f, pid in book.pages)
     nav_body = (f'<nav epub:type="toc" id="toc" role="doc-toc"><h1>{_esc(title)}</h1><ol>{toc}</ol></nav>'
                 + (f'<nav epub:type="page-list" id="page-list" hidden="hidden"><ol>{page_list}</ol></nav>'
@@ -363,14 +370,14 @@ def _write_package(out_path, book, images, cover, title, font_dir, line_height):
 
     order = 0
     points = []
-    for c in book.chapters:
+    for c in listed:
         order += 1
         point = (f'<navPoint id="np{order}" playOrder="{order}"><navLabel><text>{_esc(c["title"])}'
                  f'</text></navLabel><content src="text/{c["file"]}"/>')
-        for sid, t in c['subs']:
+        for s in c['subs']:
             order += 1
-            point += (f'<navPoint id="np{order}" playOrder="{order}"><navLabel><text>{_esc(t)}</text>'
-                      f'</navLabel><content src="text/{c["file"]}#{sid}"/></navPoint>')
+            point += (f'<navPoint id="np{order}" playOrder="{order}"><navLabel><text>{_esc(s[1])}</text>'
+                      f'</navLabel><content src="text/{sub_file(c, s)}#{s[0]}"/></navPoint>')
         points.append(point + '</navPoint>')
     points = ''.join(points)
     page_targets = ''.join(f'<pageTarget id="pt{k}" type="normal" value="{k}"><navLabel><text>{_esc(label)}</text>'

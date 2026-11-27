@@ -21,8 +21,12 @@ spacing equal to what SutonnyMJ gave, so lines and pages stay where they were (t
 cells get a little padding at top and bottom, so the Unicode font's marks clear the cell
 borders). PDF output
 lays that document out at its page size and margins (printed with Chrome; headers,
-footers and footnotes are not drawn). EPUB output starts a chapter at each large bold
-heading, with bold headings at body size as sections. Page numbers that were in SutonnyMJ
+footers and footnotes are not drawn). EPUB output follows the document's page breaks
+when it has them (a book set in Word puts each part, chapter and picture page after one):
+each break starts a new page, titled in the table of contents by the large heading lines it
+opens with ("অধ্যায় ৯: ইতিহাসের ইশারা"), with bold headings inside as its sections.
+Without page breaks, a chapter starts at each large bold heading, with bold headings at
+body size as sections. Page numbers that were in SutonnyMJ
 stay in Bangla digits (১, ২, ৩), in Word documents made from PDFs too.
 
 **Already-Unicode Word files.** A `.docx` that is already in Unicode Bangla, such as a

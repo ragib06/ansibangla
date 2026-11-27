@@ -419,8 +419,13 @@ def page_html(model, font_dir, embed=False):
 # ---------------------------------------------------------------- EPUB
 
 def export_epub(model, out_epub, font_dir, title=None):
-    """A reflowable EPUB: chapters at large bold headings, sections at bold body-size
-    headings, spacing and indents relative to the body text."""
+    """A reflowable EPUB, spacing and indents relative to the body text.
+
+    A document that marks its structure with page breaks (books typeset in Word put each
+    part, chapter and picture page after one) gets a new page at each break, titled by
+    the large heading lines it starts with ("অধ্যায় ৯" + "ইতিহাসের ইশারা"), bold or not;
+    bold headings inside are its sections. Otherwise chapters start at large bold
+    headings, with bold body-size headings as sections."""
     from .epubexport import _Book, _write_package
 
     body = model['body_size']
@@ -447,9 +452,78 @@ def export_epub(model, out_epub, font_dir, title=None):
     big = [b for b in blocks if b['kind'] == 'p' and _heading_level(b, body) == 1]
     chapter_size = Counter(head_size(b) for b in big).most_common(1)[0][0] if big else None
 
+    # explicit page breaks: a few of them mean the document is laid out in pages that
+    # matter (part, chapter and picture pages), not just the odd forced break
+    starts = {i for i, b in enumerate(blocks) if b['kind'] == 'p' and b['break_before']}
+    starts |= {i + 1 for i, b in enumerate(blocks[:-1]) if b['kind'] == 'p' and b['break_after']}
+    by_breaks = len(starts) >= 3
+    opened = set()
+    # the book's title: the largest line on the opening pages (the title page)
+    first_page = [b for b in blocks[:min(starts, default=len(blocks))] if b['kind'] == 'p'
+                  and text_of(b) and len(text_of(b)) <= 100 and not _pictures(b['runs'])]
+    title_line = max(first_page, key=head_size, default=None) if by_breaks else None
+    if title_line is not None and head_size(title_line) <= body:
+        title_line = None
+
+    def blank(b):
+        return b['kind'] == 'p' and not text_of(b) and not _pictures(b['runs'])
+
+    def display(b):
+        """A large heading line, bold or not: short text, all of it well above body size."""
+        shown = [r for r in b.get('runs', []) if r.get('text', '').strip()] if b['kind'] == 'p' else []
+        return (bool(shown) and not _pictures(b['runs']) and len(text_of(b)) <= 100
+                and min(r['size'] for r in shown) >= body + 3)
+
+    def section(b, sid_text):
+        """A section heading: an entry under the current titled chapter."""
+        nonlocal n_sec
+        n_sec += 1
+        sid = f'sec{n_sec}'
+        owner = next((c for c in reversed(book.chapters) if c.get('toc', True)), book.chapters[-1])
+        owner['subs'].append((sid, sid_text, book.chapters[-1]['file']))
+        style = f'margin:{b["before"] / em:.2f}em 0 {b["after"] / em:.2f}em'
+        if b['align'] == 'center':
+            style += ';text-align:center'
+        if head_size(b) > body:
+            style += f';font-size:{size_em(head_size(b))}'
+        book.add(f'<h2 id="{sid}" style="{style}">{html.escape(sid_text, quote=False)}</h2>')
+
     k = 0
     while k < len(blocks):
         b = blocks[k]
+        if by_breaks and (k == 0 or k in starts) and k not in opened:
+            # a new page: titled by the heading lines it opens with, if any
+            opened.add(k)
+            if book.chapters[-1]['parts'] or book.chapters[-1]['title']:
+                book.chapter()
+            j, group = k, []
+            while j < len(blocks) and (j == k or j not in starts):
+                if blank(blocks[j]):
+                    j += 1
+                elif display(blocks[j]):
+                    group.append(blocks[j])
+                    j += 1
+                else:
+                    break
+            if group:
+                parts = []
+                for h in group:
+                    tag = 'h1' if h is group[0] else 'p'
+                    align = 'center' if h['align'] == 'center' else 'left'
+                    weight = 'bold' if all(r['bold'] for r in h['runs'] if r.get('text', '').strip()) else 'normal'
+                    parts.append(f'<{tag} style="font-size:{size_em(head_size(h))};font-weight:{weight};'
+                                 f'text-align:{align};margin:0.6em 0">'
+                                 f'{html.escape(text_of(h), quote=False)}</{tag}>')
+                book.add(''.join(parts))
+                book.chapters[-1]['title'] = ': '.join(text_of(h) for h in group)
+                k = j
+                continue
+            if len(book.chapters) > 1:
+                book.chapters[-1]['toc'] = False  # a page without a heading: no entry of its own
+        if by_breaks and b['kind'] == 'p' and _heading_level(b, body):
+            section(b, text_of(b))
+            k += 1
+            continue
         if b['kind'] == 'table':
             def cell_html(cell):
                 # cell text keeps its alignment; left otherwise, as justifying a narrow
@@ -535,6 +609,9 @@ def export_epub(model, out_epub, font_dir, title=None):
     if not book.chapters:
         book.chapter()
         book.add('<p></p>')
+    book.chapters[0].pop('toc', None)             # the opening always has an entry
+    if title_line is not None and not book.chapters[0]['title']:
+        book.chapters[0]['title'] = text_of(title_line)
     title = title or next((c['title'] for c in book.chapters if c['title']), None) or 'Untitled'
     for n, c in enumerate(book.chapters, 1):
         c['title'] = c['title'] or (title if n == 1 else f'{n}')

@@ -334,6 +334,38 @@ def test_table_merged_cells_and_borders(borders, grid, tmp_path):
                     '<tr><td>e</td><td>f</td><td>g</td></tr></table>')
 
 
+def test_epub_pages_follow_word_page_breaks(tmp_path):
+    """A Word book laid out with page breaks gets a new page at each break, titled by the
+    large lines it opens with (bold or not); a page without such lines gets no entry of its
+    own, and bold headings inside become entries under their chapter."""
+    from ansibangla import docxrender
+    from ansibangla.api import FONT_DIR
+    W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+
+    def p(text, size=22, bold=False, brk=False):
+        rpr = f'<w:rPr>{"<w:b/>" if bold else ""}<w:sz w:val="{size}"/></w:rPr>'
+        lead = '<w:r><w:br w:type="page"/></w:r>' if brk else ''
+        return f'<w:p>{lead}<w:r>{rpr}<w:t>{text}</w:t></w:r></w:p>'
+    body = ''.join([
+        p('লেখক', 24), p('বইয়ের নাম', 40), p('সাধারণ লেখা ' * 3),
+        p('অধ্যায় ১', 25, brk=True), p(''), p('প্রথম কথা', 28), p('লেখা ' * 20), p('উপশিরোনাম', 22, bold=True),
+        p('লেখা ' * 20),
+        p('ছবির পাতার লেখা', brk=True), p('লেখা ' * 20),
+        p('অধ্যায় ২', 25, brk=True), p('দ্বিতীয় কথা', 28), p('লেখা ' * 20),
+    ] + [p('লেখা ' * 10)] * 10)
+    doc = f'<w:document xmlns:w="{W}"><w:body>{body}</w:body></w:document>'
+    model = docxrender.build_model({'word/document.xml': doc.encode()}, str(tmp_path))
+    out = docxrender.export_epub(model, str(tmp_path / 'book.epub'), FONT_DIR)
+    with zipfile.ZipFile(out) as z:
+        names = [n for n in z.namelist() if n.startswith('OEBPS/text/')]
+        nav = z.read('OEBPS/nav.xhtml').decode('utf-8')
+        opf = z.read('OEBPS/content.opf').decode('utf-8')
+    assert len(names) == 4                                  # opening + three pages after breaks
+    entries = re.findall(r'<a href="text/[^"]+">([^<]+)</a>', nav)
+    assert entries == ['বইয়ের নাম', 'অধ্যায় ১: প্রথম কথা', 'উপশিরোনাম', 'অধ্যায় ২: দ্বিতীয় কথা']
+    assert '<dc:title>বইয়ের নাম</dc:title>' in opf             # the title page's largest line
+
+
 @pytest.mark.skipif(not SAMPLES, reason='no sample PDFs in sample/')
 @pytest.mark.parametrize('src', SAMPLES)
 def test_pdf_to_docx_page_numbers_stay_bangla(src, tmp_path):
