@@ -359,6 +359,28 @@ def test_superscript_and_subscript_runs(tmp_path):
     assert docxrender._md_runs(runs, False) == 'কথা।<sup>২</sup> H<sub>2</sub>O আর<sup>৩</sup>'
 
 
+def test_epub_footnotes_are_popup_notes(tmp_path):
+    """A Word footnote becomes an EPUB 3 pop-up note: the mark links to it, the note sits
+    at the end of the chapter (linking back), and the running text is not interrupted."""
+    from ansibangla import docxrender
+    from ansibangla.api import FONT_DIR
+    W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    notes = (f'<w:footnotes xmlns:w="{W}"><w:footnote w:id="1"><w:p><w:r><w:t>পাদটীকার লেখা</w:t></w:r>'
+             '</w:p></w:footnote></w:footnotes>')
+    doc = (f'<w:document xmlns:w="{W}"><w:body>'
+           '<w:p><w:r><w:t>প্রথম অনুচ্ছেদ</w:t></w:r><w:r><w:footnoteReference w:id="1"/></w:r></w:p>'
+           '<w:p><w:r><w:t>দ্বিতীয় অনুচ্ছেদ</w:t></w:r></w:p></w:body></w:document>')
+    model = docxrender.build_model({'word/document.xml': doc.encode(), 'word/footnotes.xml': notes.encode()},
+                                   str(tmp_path))
+    out = docxrender.export_epub(model, str(tmp_path / 'book.epub'), FONT_DIR)
+    with zipfile.ZipFile(out) as z:
+        x = ''.join(z.read(n).decode('utf-8') for n in z.namelist() if n.startswith('OEBPS/text/'))
+    assert re.search(r'<a epub:type="noteref"[^>]*id="fnref1" href="#fn1">', x)
+    assert re.search(r'<aside epub:type="footnote"[^>]*id="fn1"[^>]*>.*href="#fnref1".*পাদটীকার লেখা', x)
+    # the second paragraph follows the first directly; the note comes after both
+    assert x.index('প্রথম অনুচ্ছেদ') < x.index('দ্বিতীয় অনুচ্ছেদ') < x.index('পাদটীকার লেখা')
+
+
 def test_epub_pictures_are_made_small(tmp_path):
     """Pictures go into the e-book at most EPUB_MAX_W x EPUB_MAX_H: photographs as JPEG,
     diagrams (few colours) and transparent pictures as PNG, never bigger than before."""
@@ -527,12 +549,23 @@ def test_docx_input_to_pdf_and_epub(src, tmp_path):
     if web:
         assert sum(len(p.get_images()) for p in pymupdf.open(written['pdf'])) > 0
         assert any('/images/' in n for n in zipfile.ZipFile(written['epub']).namelist())
-    # every word of the Markdown is in the e-book, in order
-    body = re.sub(r'</?(span|sup|sub)\b[^>]*>', '', body)    # inline tags join words
-    epub_words = htmllib.unescape(re.sub(r'<[^>]+>', ' ', body)).split()
+    # the e-book has the Markdown's words: its text in order, each footnote in order (the
+    # e-book gathers footnotes at the chapter's end, the Markdown keeps them in place)
+    body = re.sub(r'<head>.*?</head>', ' ', body, flags=re.S)    # chapter titles repeat headings
+    body = re.sub(r'</?(span|sup|sub|a)\b[^>]*>', '', body)  # inline tags join words
+
+    def words(fragment):
+        return htmllib.unescape(re.sub(r'<[^>]+>', ' ', fragment)).split()
+    notes = re.findall(r'<aside\b.*?</aside>', body, re.S)
+    main = words(re.sub(r'<aside\b.*?</aside>', ' ', body, flags=re.S))
     md_words = _md_words(written['md'])
-    it = iter(epub_words)
-    assert all(w in it for w in md_words)
+
+    def in_order(part, whole):
+        it = iter(whole)
+        return all(w in it for w in part)
+    assert in_order(main, md_words)
+    assert all(in_order(words(n), md_words) for n in notes)
+    assert len(main) + sum(len(words(n)) for n in notes) == len(md_words)
 
 
 @pytest.mark.skipif(not SAMPLES + DOCX_SAMPLES, reason='no samples in sample/')

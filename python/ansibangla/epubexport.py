@@ -50,6 +50,10 @@ td p, td p.c { margin: 0; text-indent: 0; }
 p.l { text-align: left; }
 p.r { text-align: right; }
 sup, sub { line-height: 0; }
+a.nr { text-decoration: none; }
+aside.fn { line-height: 1.45; margin: 0.5em 0 0; }
+aside.fn.first { margin-top: 2em; padding-top: 0.5em; border-top: 1px solid currentColor; }
+aside.fn p { text-indent: 0; text-align: left; }
 """
 
 XHTML = ('<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE html>\n'
@@ -466,5 +470,10 @@ def _write_package(out_path, book, images, cover, title, font_dir, line_height):
             # pictures are compressed already; deflating them again only costs time
             z.writestr(f'OEBPS/images/{name}', data, compress_type=zipfile.ZIP_STORED)
         for c in book.chapters:
+            # a chapter's footnotes (EPUB 3 pop-up notes) after its text; readers that show
+            # notes in place of pop-ups show them here, under a rule
+            notes = c.get('notes', [])
+            if notes:
+                notes = [notes[0].replace('class="fn"', 'class="fn first"', 1)] + notes[1:]
             z.writestr(f'OEBPS/text/{c["file"]}',
-                       XHTML.format(title=_esc(c['title']), cls='', body='\n'.join(c['parts'])))
+                       XHTML.format(title=_esc(c['title']), cls='', body='\n'.join(c['parts'] + notes)))

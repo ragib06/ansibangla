@@ -120,6 +120,7 @@ def build_model(files, media_dir):
     fmt = root.find(f'.//{q("footnotePr")}/{q("numFmt")}')
     chicago = fmt is not None and fmt.get(q('val')) == 'chicago'
     counter = [0]
+    note_seq = [0]
 
     def footnote_mark(n_in_para):
         if chicago:
@@ -167,8 +168,9 @@ def build_model(files, media_dir):
                         para['runs'].append(dict(picture=pic, **props))
                 elif tag in ('footnoteReference', 'endnoteReference'):
                     mark = footnote_mark(len(para['notes']))
-                    para['runs'].append(dict(text=mark, sup=True, **props))
-                    para['notes'].append(dict(mark=mark, paras=notes.get(c.get(q('id')), [])))
+                    note_seq[0] += 1                  # unique in the book, for links to the note
+                    para['runs'].append(dict(text=mark, sup=True, note=note_seq[0], **props))
+                    para['notes'].append(dict(mark=mark, paras=notes.get(c.get(q('id')), []), id=note_seq[0]))
         # a heading set letter by letter ("প্র থ ম  প র্ব") is one word per gap
         shown = [x for x in para['runs'] if x.get('text', '').strip()]
         text = ''.join(x.get('text', '') for x in para['runs'] if 'picture' not in x)
@@ -294,8 +296,9 @@ def _heading_level(para, body_size):
 VERT_SCALE = 0.65                  # size of superscript / subscript text, as Word draws it
 
 
-def _runs_html(runs, size_unit):
-    """Runs as HTML. size_unit(half_points) gives the CSS font size."""
+def _runs_html(runs, size_unit, note_links=None):
+    """Runs as HTML. size_unit(half_points) gives the CSS font size. note_links: ids of
+    footnotes to link their marks to (the e-book's pop-up footnotes), or None."""
     out = []
     for r in runs:
         if 'picture' in r:
@@ -312,6 +315,10 @@ def _runs_html(runs, size_unit):
             style += f';font-family:{LATIN}'
         attr = f' class="{" ".join(cls)}"' if cls else ''
         span = f'<span{attr} style="{style}">{text}</span>'
+        if note_links and r.get('note') in note_links:
+            n = r['note']
+            span = (f'<a epub:type="noteref" role="doc-noteref" class="nr" id="fnref{n}" href="#fn{n}">'
+                    f'{span}</a>')
         if r.get('sup') or vert == 'superscript':
             span = f'<sup>{span}</sup>'
         elif vert == 'subscript':
@@ -601,7 +608,8 @@ def export_epub(model, out_epub, font_dir, title=None):
                      f'{html.escape(text, quote=False)}</h2>')
             k += 1
             continue
-        inner = _runs_html(b['runs'], size_em)
+        with_text = {n['id'] for n in b.get('notes', []) if n['paras']}
+        inner = _runs_html(b['runs'], size_em, note_links=with_text)
         for pic in _pictures(b['runs']):
             if (pic['name'], pic['path']) not in images:
                 images.append((pic['name'], pic['path']))
@@ -632,11 +640,18 @@ def export_epub(model, out_epub, font_dir, title=None):
             style.append('text-align:right')
         attr = (f' class="{align}"' if align else '') + (f' style="{";".join(style)}"' if style else '')
         book.add(re.sub(r'<p>\s*</p>', '', f'<p{attr}>{inner}</p>'))
-        for mark, paras in _notes(b):             # footnotes follow their paragraph
-            for n, fp in enumerate(paras):
-                lead = html.escape(mark, quote=False) + ' ' if n == 0 else ''
-                book.add(f'<p class="small" style="margin-top:{0.4 if n == 0 else 0}em">'
-                         f'{lead}{_runs_html(fp["runs"], size_em)}</p>')
+        # footnotes go to the end of the chapter as pop-up notes (EPUB 3 footnotes): readers
+        # show them when the mark is tapped, and the running text stays unbroken
+        for note in b.get('notes', []):
+            if not note['paras']:
+                continue
+            n = note['id']
+            back = (f'<a href="#fnref{n}" role="doc-backlink">'
+                    f'{html.escape(note["mark"], quote=False)}</a> ')
+            body_html = ''.join(f'<p>{back if j == 0 else ""}{_runs_html(fp["runs"], size_em)}</p>'
+                                for j, fp in enumerate(note['paras']))
+            book.chapters[-1].setdefault('notes', []).append(
+                f'<aside epub:type="footnote" role="doc-footnote" id="fn{n}" class="fn">{body_html}</aside>')
         k += 1
 
     book.chapters = [c for c in book.chapters if c['parts']]
