@@ -37,7 +37,8 @@ paths are relative, so the site also works from a sub-folder. Build command
 ## Files
 
 ```
-index.html               page
+index.html               the converter page
+how-it-works/index.html  "how it works" page, in Bangla (served at /how-it-works/)
 src/main.ts              form, results, downloads
 src/worker.ts            loads Pyodide + PyMuPDF + the package, runs conversions
 src/print.ts             prints the html output through a hidden frame

@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="bn">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>বিজয় থেকে ইউনিকোড কীভাবে করবেন: পিডিএফ, ওয়ার্ড ও ই-বুক | How Bijoy to Unicode works</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%239b2c1f'/%3E%3Ctext x='16' y='23' font-size='19' text-anchor='middle' fill='%23fffaf2' font-family='serif'%3E%E0%A6%85%3C/text%3E%3C/svg%3E" />
+    <meta name="description" content="বিজয় (SutonnyMJ) পিডিএফ ও ওয়ার্ড ফাইল কীভাবে ইউনিকোড ও নিকশে রূপান্তর হয়, ই-বুক (EPUB) বানানো, আর সীমাবদ্ধতা। How Bijoy to Unicode conversion of PDF and Word files works." />
+    <link rel="canonical" href="https://ansibangla.cc/how-it-works/" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="ANSI Bangla" />
+    <meta property="og:url" content="https://ansibangla.cc/how-it-works/" />
+    <meta property="og:title" content="বিজয় থেকে ইউনিকোড কীভাবে করবেন: পিডিএফ, ওয়ার্ড ও ই-বুক" />
+    <meta property="og:description" content="বিজয়ের লেখা কেন হিজিবিজি দেখায়, পুরো ফাইল কীভাবে লেআউট ঠিক রেখে ইউনিকোড হয়, নিকশ ফন্ট, আর প্রকাশকদের জন্য ই-বুক।" />
+    <meta property="og:locale" content="bn_BD" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta name="twitter:card" content="summary" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": "বিজয় থেকে ইউনিকোড কীভাবে করবেন: পিডিএফ, ওয়ার্ড ও ই-বুক",
+        "alternativeHeadline": "How Bijoy to Unicode conversion works: PDF, Word and e-books",
+        "inLanguage": "bn",
+        "url": "https://ansibangla.cc/how-it-works/",
+        "isPartOf": { "@type": "WebSite", "name": "ANSI Bangla", "url": "https://ansibangla.cc/" },
+        "about": ["Bijoy", "SutonnyMJ", "Unicode", "Nikosh", "EPUB"]
+      }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Bengali:wght@500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main class="wrap doc">
+      <p class="back"><a href="../">← রূপান্তরকারীতে ফিরুন</a> <span class="muted">Back to the converter</span></p>
+
+      <header class="masthead">
+        <p class="eyebrow">ANSI Bangla</p>
+        <h1>বিজয় থেকে ইউনিকোড: কীভাবে কাজ করে</h1>
+        <p class="lede">
+          বিজয়ে লেখা পুরো পিডিএফ বা ওয়ার্ড ফাইল কীভাবে ইউনিকোড হয়, কোন ফাইলে কী পাবেন, আর কোথায়
+          সীমাবদ্ধতা আছে, সব এক জায়গায়।
+        </p>
+        <p class="lede-en" lang="en">How the converter turns whole Bijoy (SutonnyMJ) PDF and Word files into Unicode, what each output gives you, and its limits.</p>
+      </header>
+
+      <nav class="toc" aria-label="এই পাতায়">
+        <ol>
+          <li><a href="#why">বিজয়ের লেখা কেন হিজিবিজি দেখায়</a></li>
+          <li><a href="#privacy">আপনার ফাইলের কী হয়</a></li>
+          <li><a href="#pdf">পিডিএফ থেকে</a></li>
+          <li><a href="#word">ওয়ার্ড (.docx) থেকে</a></li>
+          <li><a href="#outputs">কোন ফাইলে কী পাবেন</a></li>
+          <li><a href="#nikosh">নিকশ ফন্টে চাই?</a></li>
+          <li><a href="#publishers">প্রকাশকদের জন্য: বিজয়ের বই থেকে ই-বুক</a></li>
+          <li><a href="#limits">সীমাবদ্ধতা ও টিপস</a></li>
+          <li><a href="#developers">ডেভেলপারদের জন্য</a></li>
+        </ol>
+      </nav>
+
+      <section id="why">
+        <h2>১. বিজয়ের লেখা কেন হিজিবিজি দেখায়</h2>
+        <p>
+          বিজয়ের SutonnyMJ-এর মতো ফন্ট (যেগুলোকে ANSI বা “এমজে” ফন্ট বলে) আসলে ইংরেজি অক্ষরের জায়গায়
+          বাংলা অক্ষরের ছবি দেখায়। তাই ফাইলের ভেতরে বাংলা নয়, থাকে ইংরেজি কোড। ওই ফন্ট ছাড়া খুললে, লেখা
+          কপি করলে বা সার্চ করলে সেই কোডগুলোই বেরিয়ে আসে:
+        </p>
+        <p class="example">
+          <span class="ex-label">ফাইলে যা আছে</span> <code lang="en">wbwØ©avq</code>
+          <span class="ex-arrow">→</span>
+          <span class="ex-label">ইউনিকোডে</span> <span class="ex-bn">নির্দ্বিধায়</span>
+        </p>
+        <p>
+          ইউনিকোডে ফাইলে আসল বাংলা অক্ষরই থাকে। তাই সেই লেখা যেকোনো ফোন, কম্পিউটার, ওয়েবসাইট বা
+          সার্চে ঠিকমতো দেখা যায়, কপি করা যায়, খোঁজা যায়। নিকশ, কালপুরুষ বা Noto-র মতো যেকোনো
+          ইউনিকোড ফন্টে সেই লেখা দেখানো যায়।
+        </p>
+        <p>
+          বিজয়ে বাংলা লেখার একটা নিয়ম আছে যা ইউনিকোডে উল্টো: যেমন “কে” লিখতে আগে এ-কার, পরে ক টাইপ করা
+          হয়, আর রেফ বসে অক্ষরের পরে (“র্ক”-এর রেফ ক-এর পরে)। রূপান্তরকারী প্রতিটি শব্দ পড়ে এগুলো ইউনিকোডের ক্রমে সাজিয়ে
+          নেয়, যুক্তাক্ষরসহ।
+        </p>
+      </section>
+
+      <section id="privacy">
+        <h2>২. আপনার ফাইলের কী হয়</h2>
+        <p>
+          কিছুই আপলোড হয় না। পুরো রূপান্তর আপনার ব্রাউজারের ভেতরেই চলে: পাতাটি Pyodide (WebAssembly-তে
+          চলা Python) দিয়ে একটি Python প্রোগ্রাম চালায়, আর পিডিএফ পড়ার জন্য PyMuPDF ব্যবহার করে। আপনার
+          ফাইল আপনার যন্ত্র ছেড়ে কোথাও যায় না।
+        </p>
+        <p>
+          প্রথমবার পাতাটি খুললে প্রায় ২২ MB ডাউনলোড হয় (রূপান্তরের প্রোগ্রাম)। পরে ব্রাউজার সেটি মনে রাখে,
+          তাই পরের বার দ্রুত খোলে। টেক্সট রূপান্তর কয়েক সেকেন্ডেই তৈরি হয়ে যায়; ফাইলের জন্য পুরো প্রোগ্রাম
+          লোড হওয়া পর্যন্ত অপেক্ষা করতে হয়।
+        </p>
+      </section>
+
+      <section id="pdf">
+        <h2>৩. পিডিএফ থেকে</h2>
+        <p>
+          পিডিএফের প্রতিটি লাইনের লেখা, ফন্ট আর পাতায় তার অবস্থান পড়া হয়। SutonnyMJ বা অন্য বিজয় (MJ)
+          ফন্টের লেখা ইউনিকোডে বদলায়, আর প্রতিটি পাতা আগের মাপে, আগের জায়গায়, ছবি ও পাতার রংসহ নতুন করে
+          তৈরি হয় একটি ইউনিকোড বাংলা ফন্টে (Noto Serif Bengali)।
+        </p>
+        <p>
+          ইউনিকোড অক্ষর বিজয়ের চেয়ে একটু চওড়া হয়। তাই প্রতিটি অনুচ্ছেদ আগের মতো একই সংখ্যক লাইনে আঁটানো
+          হয়, যাতে লেখা পাশের লাইনের ওপর না পড়ে আর পাতা যেখানে ভাঙত সেখানেই ভাঙে।
+        </p>
+        <p>
+          পিডিএফ যদি স্ক্যান করা হয় (অর্থাৎ পাতার ছবি), তাহলে তাতে পড়ার মতো লেখাই নেই; সেটি রূপান্তর হবে
+          না। এর জন্য আগে OCR লাগে।
+        </p>
+      </section>
+
+      <section id="word">
+        <h2>৪. ওয়ার্ড (.docx) থেকে</h2>
+        <p>
+          ফাইলটি যেমন আছে তেমনই থাকে, শুধু বিজয়ের লেখাটুকু ইউনিকোড হয়। স্টাইল, অনুচ্ছেদের ফাঁক, টেবিল,
+          ছবি, হেডার-ফুটার, পাতার মাপ সব আগের মতো। ইংরেজি বা অন্য ফন্টের লেখা যেমন ছিল তেমনই থাকে।
+        </p>
+        <ul>
+          <li>SutonnyMJ অক্ষর ছোট করে আঁকে, তাই ইউনিকোড লেখা আকারে একটু ছোট করা হয় (০.৯ গুণ) আর লাইনের
+            ফাঁক আগের মতো রাখা হয়, যাতে পাতা যেখানে ভাঙত সেখানেই ভাঙে।</li>
+          <li>পাতার নম্বর বাংলা অঙ্কেই (১, ২, ৩) থাকে।</li>
+          <li>টেবিলের ঘরে একটু ফাঁক দেওয়া হয়, যাতে ইউনিকোড অক্ষরের মাত্রা ঘরের দাগে না লাগে।</li>
+          <li>ব্যবহৃত ফন্ট ফাইলের ভেতরেই রাখা থাকে, তাই অন্য কম্পিউটারেও একই রকম দেখায়।</li>
+        </ul>
+        <p>
+          পুরনো <code lang="en">.doc</code> ফাইল আগে Word-এ খুলে <code lang="en">.docx</code> হিসেবে সেভ করে নিন।
+          আগেই ইউনিকোডে থাকা <code lang="en">.docx</code> (যেমন রূপান্তরের পর আপনি সম্পাদনা করেছেন) থেকেও
+          পিডিএফ, ই-বুক বা মার্কডাউন বানানো যায়।
+        </p>
+      </section>
+
+      <section id="outputs">
+        <h2>৫. কোন ফাইলে কী পাবেন</h2>
+        <dl class="outputs">
+          <dt>পিডিএফ</dt>
+          <dd>
+            আগের পাতার মতোই পাতা, কিন্তু লেখা এখন খোঁজা ও কপি করা যায়। পিডিএফ তৈরি হয় ব্রাউজারের প্রিন্ট
+            ডায়ালগ দিয়ে: <b lang="en">Save as PDF</b> বেছে নিন, স্কেল ১০০% রাখুন। Chrome বা Edge-এ ফল মূল
+            পাতার সবচেয়ে কাছাকাছি হয়; Safari বা Firefox-এ লাইন একটু অন্যভাবে ভাঙতে পারে।
+          </dd>
+          <dt>ওয়ার্ড (.docx)</dt>
+          <dd>সম্পাদনার জন্য। পিডিএফ থেকে বানালেও পাতা, পাতার রং, অনুচ্ছেদ, শিরোনাম, ছবি আর পাতার নম্বর
+            ধরে রাখা হয়।</dd>
+          <dt>ই-বুক (EPUB)</dt>
+          <dd>
+            ফোন, ট্যাবলেট বা ই-রিডারে পড়ার জন্য, লেখা পর্দার মাপে সাজে। ওয়ার্ড ফাইলে যেখানে পাতা ভাঙা
+            (page break) আছে সেখান থেকে নতুন অধ্যায় বা পাতা শুরু হয়, আর বড় শিরোনাম থেকে সূচিপত্র তৈরি হয়
+            (যেমন “অধ্যায় ৯: ইতিহাসের ইশারা”)। পাদটীকা চাপলে পপ-আপে খোলে, টেবিল ও ছবি থাকে, আর ছবি ই-বুকের
+            মাপে ছোট করা হয় যাতে ফাইল হালকা হয়।
+          </dd>
+          <dt>মার্কডাউন</dt>
+          <dd>সাধারণ লেখা হিসেবে পড়া ও সম্পাদনার জন্য; ছবি থাকলে একটি zip ফাইলে আসে।</dd>
+          <dt>টেক্সট পেস্ট</dt>
+          <dd>কয়েক লাইন বিজয়ের লেখা পেস্ট করলে সঙ্গে সঙ্গে ইউনিকোড পাবেন, কপি করার বোতামসহ।</dd>
+        </dl>
+      </section>
+
+      <section id="nikosh">
+        <h2>৬. নিকশ ফন্টে চাই?</h2>
+        <p>
+          নিকশ (NikoshBAN) একটি ইউনিকোড ফন্ট, অফিসে বহুল ব্যবহৃত। এই রূপান্তরকারীর লেখা আগেই ইউনিকোডে,
+          তাই নিকশে নিতে আর কোনো রূপান্তর লাগে না, শুধু ফন্ট বদলালেই হয়:
+        </p>
+        <ol>
+          <li>বিজয়ের ফাইলটি এখানে রূপান্তর করে <b>Word (.docx)</b> নিন।</li>
+          <li>Word-এ খুলে সব লেখা নির্বাচন করুন (<kbd lang="en">Ctrl</kbd> + <kbd lang="en">A</kbd>)।</li>
+          <li>ফন্টের তালিকা থেকে <b lang="en">NikoshBAN</b> বেছে নিন।</li>
+        </ol>
+        <p>
+          লেখা একই থাকে, শুধু চেহারা নিকশের মতো হয়। টেক্সট পেস্ট করে রূপান্তর করলেও একইভাবে যেকোনো
+          জায়গায় বসিয়ে নিকশ ফন্ট দিতে পারেন।
+        </p>
+      </section>
+
+      <section id="publishers">
+        <h2>৭. প্রকাশকদের জন্য: বিজয়ের বই থেকে ই-বুক</h2>
+        <p>
+          অনেক বই এখনো বিজয়ে কম্পোজ করা। পুরো বইয়ের ফাইল একবারে ইউনিকোড করা যায়, আর সেখান থেকে ই-বুক:
+        </p>
+        <ol>
+          <li><b>ইউনিকোড পিডিএফ:</b> বইয়ের পিডিএফ দিন, একই পাতার ইউনিকোড পিডিএফ পাবেন। লেখা খোঁজা ও
+            কপি করা যায়, আর্কাইভ বা অনলাইনে দেওয়ার জন্য উপযোগী।</li>
+          <li><b>সম্পাদনার জন্য ওয়ার্ড:</b> বইয়ের ওয়ার্ড ফাইল দিন (বা পিডিএফ থেকে ওয়ার্ড নিন), ইউনিকোড
+            ওয়ার্ড ফাইল পাবেন। Word-এ সংশোধন করুন।</li>
+          <li><b>ই-বুক:</b> সম্পাদনা করা ইউনিকোড ওয়ার্ড ফাইলটি আবার এখানে দিয়ে <b>EPUB</b> বেছে নিন।</li>
+        </ol>
+        <p>
+          ভালো সূচিপত্রের জন্য প্রতিটি অধ্যায় একটি পাতা ভাঙা (<span lang="en">Ctrl + Enter</span>) দিয়ে শুরু
+          করুন আর অধ্যায়ের নাম বড় অক্ষরে লিখুন। পাদটীকা Word-এর নিজস্ব পাদটীকা হিসেবে দিলে ই-বুকে
+          পপ-আপ হয়।
+        </p>
+        <p>
+          যেকোনো রূপান্তরের পর লেখাটি একবার মিলিয়ে নিন, বিশেষ করে বিরল যুক্তাক্ষর আর ইংরেজি শব্দ।
+        </p>
+      </section>
+
+      <section id="limits">
+        <h2>৮. সীমাবদ্ধতা ও টিপস</h2>
+        <ul>
+          <li><b>স্ক্যান করা পিডিএফ</b> (পাতার ছবি) রূপান্তর হয় না, কারণ তাতে লেখা নেই।</li>
+          <li><b>পুরনো .doc</b> ফাইল আগে .docx হিসেবে সেভ করুন।</li>
+          <li><b>ইংরেজি শব্দ SutonnyMJ ফন্টে লেখা</b> থাকলে (যেমন <code lang="en">DNA</code>) সেগুলো বাংলা
+            অক্ষরে বদলে যেতে পারে। রূপান্তরের আগে “English words typed in the SutonnyMJ font” ঘরে শব্দগুলো
+            লিখে দিন, সেগুলো যেমন আছে তেমন থাকবে।</li>
+          <li><b>EMF ছবি</b> (Word-এর পুরনো ধরনের ছবি) ই-বুক ও মার্কডাউনে আসে না, কারণ ব্রাউজার ও ই-রিডার
+            এগুলো দেখাতে পারে না। Word-এ ছবিটিকে PNG বা JPEG হিসেবে বসিয়ে নিলে আসবে।</li>
+          <li><b>বড় বই</b> রূপান্তরে কিছুটা সময় লাগে, প্রায় ৬০০ পাতার বইয়ে আধা মিনিটের মতো।</li>
+          <li><b>ভুল অক্ষর পেলে</b> কোন শব্দ, কোন ফাইল (সম্ভব হলে) জানিয়ে
+            <a href="https://github.com/ragib06/ansibangla/issues" lang="en">GitHub-এ জানান</a>।</li>
+        </ul>
+      </section>
+
+      <section id="developers" lang="en">
+        <h2 lang="bn">৯. ডেভেলপারদের জন্য</h2>
+        <p>
+          The same converter is a Python package and command-line tool,
+          <a href="https://pypi.org/project/ansibangla/">ansibangla on PyPI</a>:
+        </p>
+        <pre><code>pip install ansibangla
+ansibangla book.pdf -f pdf docx epub md
+ansibangla story.docx -f epub</code></pre>
+        <p>
+          The source code, for the package and this web app, is on
+          <a href="https://github.com/ragib06/ansibangla">GitHub</a> under the MIT License. The bundled
+          fonts are derived from Noto Serif Bengali under the SIL Open Font License.
+        </p>
+      </section>
+
+      <footer class="foot">
+        <p><a href="../">ANSI Bangla: বিজয় থেকে ইউনিকোড রূপান্তর</a> · রূপান্তর আপনার ব্রাউজারেই হয়, কোনো ফাইল আপলোড হয় না।</p>
+        <p lang="en">Bijoy, SutonnyMJ and Nikosh are names of their owners; this project is not affiliated with them.</p>
+      </footer>
+    </main>
+  </body>
+</html>

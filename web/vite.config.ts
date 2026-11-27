@@ -1,7 +1,17 @@
+import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
   // relative asset paths, so the site works from any folder (GitHub Pages project sites too)
   base: './',
   worker: { format: 'es' },
+  build: {
+    rollupOptions: {
+      // the converter, and the "how it works" page (served at /how-it-works/)
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        how: resolve(__dirname, 'how-it-works/index.html'),
+      },
+    },
+  },
 });
