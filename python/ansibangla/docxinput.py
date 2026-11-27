@@ -230,10 +230,11 @@ PPR_ORDER = ['pStyle', 'keepNext', 'keepLines', 'pageBreakBefore', 'framePr', 'w
 def _exact_lines(para, styles, max_size):
     """Word's 'auto' line spacing multiplies the font's own line height, and Unicode
     Bengali fonts have much taller ones than SutonnyMJ. Set the spacing the paragraph
-    had in SutonnyMJ as an exact value, so lines and pages stay where they were."""
+    had in SutonnyMJ as an exact value, so lines and pages stay where they were.
+    Returns whether it did."""
     line, rule = styles.line_spacing(para)
     if rule != 'auto' or not max_size:
-        return
+        return False
     exact = line / 240 * SUTONNY_LINE * max_size / 2          # pt (size is in half-points)
     ppr = para.find(q('pPr'))
     if ppr is None:
@@ -248,6 +249,45 @@ def _exact_lines(para, styles, max_size):
         ppr.insert(pos, sp)
     sp.set(q('line'), str(round(exact * 20)))
     sp.set(q('lineRule'), 'exact')
+    return True
+
+
+# Noto's marks reach past an exact line of SutonnyMJ's height (ি and reph up to about 1.03
+# em above the baseline, ু ৃ down to 0.41 below, against about 1.25 em of line): up to
+# about 0.2 em spills out. Between lines of text that is harmless, but table cells have no
+# top or bottom padding by default, so it lands on the cell borders.
+CELL_PAD = 0.2                 # em of the table's largest text, at the top and bottom of cells
+
+TBLPR_ORDER = ['tblStyle', 'tblpPr', 'tblOverlap', 'bidiVisual', 'tblStyleRowBandSize',
+               'tblStyleColBandSize', 'tblW', 'jc', 'tblCellSpacing', 'tblInd', 'tblBorders',
+               'shd', 'tblLayout', 'tblCellMar', 'tblLook', 'tblCaption', 'tblDescription']
+
+
+def _pad_cells(tbl, max_size):
+    """Give a table's cells at least CELL_PAD em of padding at top and bottom (max_size in
+    half-points), so text set with exact line spacing clears the cell borders."""
+    pad = round(CELL_PAD * max_size * 10)          # twips (an em is size x 20, size = half-points / 2)
+    tblpr = tbl.find(q('tblPr'))
+    if tblpr is None:
+        tblpr = ET.Element(q('tblPr'))
+        tbl.insert(0, tblpr)
+    mar = tblpr.find(q('tblCellMar'))
+    if mar is None:
+        mar = ET.Element(q('tblCellMar'))
+        rank = TBLPR_ORDER.index('tblCellMar')
+        pos = next((k for k, c in enumerate(tblpr) if _local(c) in TBLPR_ORDER
+                    and TBLPR_ORDER.index(_local(c)) > rank), len(tblpr))
+        tblpr.insert(pos, mar)
+    for side, after in (('top', ()), ('bottom', ('top', 'left', 'start'))):
+        el = mar.find(q(side))
+        if el is None:
+            el = ET.Element(q(side))
+            pos = max((k + 1 for k, c in enumerate(mar) if _local(c) in after), default=0)
+            mar.insert(pos, el)
+        elif el.get(q('type')) == 'dxa' and int(el.get(q('w')) or 0) >= pad:
+            continue                               # already padded enough
+        el.set(q('w'), str(pad))
+        el.set(q('type'), 'dxa')
 
 
 def _scaled(half_points, scale):
@@ -435,11 +475,19 @@ def _convert_part(xml_bytes, styles, scale=1.0, digits_font=None):
                 if sz is not None and para is not None and para not in conv.para_size:
                     conv.para_size[para] = int(sz.get(q('val')))      # an empty SutonnyMJ line
                 _unicode_rpr(ppr_rpr, {}, scale)
+    table_size = {}                              # table -> largest text set with exact lines in it
     for para, size in conv.para_size.items():
         # a paragraph holding a picture, shape or object keeps its spacing: an exact line
         # height would crop the picture to it
         if not any(_local(e) in ('pict', 'drawing', 'object') for e in para.iter()):
-            _exact_lines(para, styles, size)
+            if _exact_lines(para, styles, size):
+                tbl = parents.get(para)
+                while tbl is not None and _local(tbl) != 'tbl':
+                    tbl = parents.get(tbl)
+                if tbl is not None:
+                    table_size[tbl] = max(table_size.get(tbl, 0), size)
+    for tbl, size in table_size.items():
+        _pad_cells(tbl, size)
     for run in page_runs:
         fonts = run.find(q('rPr')).find(q('rFonts'))      # set by the conversion just now
         for attr in ('ascii', 'hAnsi', 'cs', 'eastAsia'):

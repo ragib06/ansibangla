@@ -17,7 +17,9 @@ a `.docx`.
 **Word input.** The `.docx` output is the same document with its SutonnyMJ text in
 Unicode. Styles, paragraph spacing, alignment, page setup, tables, pictures, headers and
 footers are left as they are; text is set at `--scale` of its size, with exact line
-spacing equal to what SutonnyMJ gave, so lines and pages stay where they were. PDF output
+spacing equal to what SutonnyMJ gave, so lines and pages stay where they were (table
+cells get a little padding at top and bottom, so the Unicode font's marks clear the cell
+borders). PDF output
 lays that document out at its page size and margins (printed with Chrome; headers,
 footers and footnotes are not drawn). EPUB output starts a chapter at each large bold
 heading, with bold headings at body size as sections. Page numbers that were in SutonnyMJ

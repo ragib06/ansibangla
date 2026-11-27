@@ -277,6 +277,63 @@ def test_docx_page_numbers_stay_bangla(src, tmp_path):
     assert in_footers == mj_page_field
 
 
+@pytest.mark.skipif(not DOCX_SAMPLES, reason='no sample .docx files in sample/')
+@pytest.mark.parametrize('src', DOCX_SAMPLES)
+def test_docx_tables_padded_for_exact_lines(src, tmp_path):
+    """Cell text set with exact line spacing gets top and bottom cell padding, or Noto's
+    marks (ি, reph, ু, ৃ) reach past the line onto the cell borders."""
+    import xml.etree.ElementTree as ET
+    from ansibangla import convert_docx
+    from ansibangla.docxinput import TBLPR_ORDER, W
+    out = convert_docx(src, tmp_path, formats=('docx',))['docx']
+    with zipfile.ZipFile(out) as z:
+        root = ET.fromstring(z.read('word/document.xml'))
+    w = lambda tag: f'{{{W}}}{tag}'
+    for tbl in root.iter(w('tbl')):
+        own = [p for p in tbl.iter(w('p'))]
+        if not any(s.get(w('lineRule')) == 'exact' for p in own for s in p.iter(w('spacing'))):
+            continue
+        tblpr = tbl.find(w('tblPr'))
+        mar = tblpr.find(w('tblCellMar'))
+        assert mar is not None
+        for side in ('top', 'bottom'):
+            assert int(mar.find(w(side)).get(w('w'))) > 0
+        tags = [c.tag.split('}')[1] for c in tblpr]
+        ranks = [TBLPR_ORDER.index(t) for t in tags if t in TBLPR_ORDER]
+        assert ranks == sorted(ranks)                     # schema order kept
+        sides = [c.tag.split('}')[1] for c in mar]
+        assert sides.index('top') < sides.index('bottom')
+
+
+@pytest.mark.parametrize('borders, grid', [
+    ('<w:tblBorders><w:top w:val="single"/></w:tblBorders>', True),
+    ('<w:tblStyle w:val="TableGrid"/>', True),
+    ('<w:tblBorders><w:top w:val="nil"/><w:insideH w:val="none"/></w:tblBorders>', False),
+    ('', False),
+])
+def test_table_merged_cells_and_borders(borders, grid, tmp_path):
+    """Word tables reach the e-book and PDF with merged cells as colspan / rowspan, and
+    borders only when the table has them."""
+    from ansibangla import docxrender
+    W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+
+    def tc(text, pr=''):
+        return f'<w:tc><w:tcPr>{pr}</w:tcPr><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:tc>'
+    span2, restart, cont = '<w:gridSpan w:val="2"/>', '<w:vMerge w:val="restart"/>', '<w:vMerge/>'
+    doc = (f'<w:document xmlns:w="{W}"><w:body><w:tbl><w:tblPr>{borders}</w:tblPr>'
+           f'<w:tr>{tc("A", span2)}{tc("B", restart)}</w:tr>'
+           f'<w:tr>{tc("c")}{tc("d")}{tc("", cont)}</w:tr>'
+           f'<w:tr>{tc("e")}{tc("f")}{tc("g")}</w:tr></w:tbl><w:p/></w:body></w:document>')
+    model = docxrender.build_model({'word/document.xml': doc.encode()}, str(tmp_path))
+    html = docxrender._table_html(model['blocks'][0], lambda blocks: ''.join(
+        r.get('text', '') for p in docxrender._paragraphs(blocks) for r in p['runs']))
+    opening = '<table class="grid">' if grid else '<table>'
+    assert html == (opening +
+                    '<tr><td colspan="2">A</td><td rowspan="2">B</td></tr>'
+                    '<tr><td>c</td><td>d</td></tr>'
+                    '<tr><td>e</td><td>f</td><td>g</td></tr></table>')
+
+
 @pytest.mark.skipif(not SAMPLES, reason='no sample PDFs in sample/')
 @pytest.mark.parametrize('src', SAMPLES)
 def test_pdf_to_docx_page_numbers_stay_bangla(src, tmp_path):

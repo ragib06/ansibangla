@@ -189,6 +189,32 @@ def build_model(files, media_dir):
                     fp['runs'].pop(0)
             notes[fn.get(q('id'))] = [fp for fp in paras if fp['runs']]
 
+    def table(tbl):
+        """A table block: rows of cells {blocks, span (columns), rowspan, merged (covered
+        by the cell above)}, and whether the table draws borders."""
+        rows, starts = [], {}                    # starts: grid column -> cell a vertical merge started at
+        for tr in tbl.findall(q('tr')):
+            before = tr.find(f'{q("trPr")}/{q("gridBefore")}')
+            col = int(before.get(q('val'), 0)) if before is not None else 0
+            row = []
+            for tc in tr.findall(q('tc')):
+                tcpr = tc.find(q('tcPr'))
+                span_el = tcpr.find(q('gridSpan')) if tcpr is not None else None
+                span = int(span_el.get(q('val'), 1)) if span_el is not None else 1
+                vm = tcpr.find(q('vMerge')) if tcpr is not None else None
+                cell = dict(blocks=blocks_of(tc), span=span, rowspan=1, merged=False)
+                if vm is not None and vm.get(q('val')) != 'restart' and col in starts:
+                    cell['merged'] = True           # <w:vMerge/> carries on the cell above
+                    starts[col]['rowspan'] += 1
+                elif vm is not None and vm.get(q('val')) == 'restart':
+                    starts[col] = cell
+                else:
+                    starts.pop(col, None)
+                row.append(cell)
+                col += span
+            rows.append(row)
+        return dict(kind='table', rows=rows, borders=_has_borders(tbl))
+
     def blocks_of(container):
         out = []
         for child in container:
@@ -196,10 +222,7 @@ def build_model(files, media_dir):
             if tag == 'p':
                 out.append(paragraph(child))
             elif tag == 'tbl':
-                rows = []
-                for tr in child.findall(q('tr')):
-                    rows.append([blocks_of(tc) for tc in tr.findall(q('tc'))])
-                out.append(dict(kind='table', rows=rows))
+                out.append(table(child))
             elif tag in ('sdt', 'customXml', 'sdtContent'):
                 inner = child.find(q('sdtContent')) if tag == 'sdt' else child
                 out.extend(blocks_of(inner if inner is not None else child))
@@ -222,7 +245,37 @@ def _paragraphs(blocks):
         else:
             for row in b['rows']:
                 for cell in row:
-                    yield from _paragraphs(cell)
+                    yield from _paragraphs(cell['blocks'])
+
+
+def _has_borders(tbl):
+    """Whether a table draws cell borders: set on the table itself, or by a grid table
+    style (Word's own "Table Grid" and the like)."""
+    tblpr = tbl.find(q('tblPr'))
+    if tblpr is None:
+        return False
+    borders = tblpr.find(q('tblBorders'))
+    if borders is not None:
+        return any(b.get(q('val')) not in (None, 'nil', 'none') for b in borders)
+    style = tblpr.find(q('tblStyle'))
+    return style is not None and 'grid' in (style.get(q('val')) or '').lower()
+
+
+def _table_html(table, cell_html):
+    """HTML for a table block; cell_html(blocks) gives a cell's contents. Merged cells
+    become colspan / rowspan, and class "grid" marks a table with borders."""
+    rows = []
+    for row in table['rows']:
+        cells = []
+        for cell in row:
+            if cell['merged']:
+                continue
+            attrs = (f' colspan="{cell["span"]}"' if cell['span'] > 1 else '') + \
+                    (f' rowspan="{cell["rowspan"]}"' if cell['rowspan'] > 1 else '')
+            cells.append(f'<td{attrs}>{cell_html(cell["blocks"])}</td>')
+        rows.append('<tr>' + ''.join(cells) + '</tr>')
+    grid = ' class="grid"' if table['borders'] else ''
+    return f'<table{grid}>' + ''.join(rows) + '</table>'
 
 
 def _heading_level(para, body_size):
@@ -320,9 +373,7 @@ def _blocks_html_pdf(blocks, img_src):
         if b['kind'] == 'p':
             out.append(_para_html_pdf(b, img_src))
         else:
-            rows = ''.join('<tr>' + ''.join(f'<td>{_blocks_html_pdf(cell, img_src)}</td>' for cell in row)
-                           + '</tr>' for row in b['rows'])
-            out.append(f'<table>{rows}</table>')
+            out.append(_table_html(b, lambda cell: _blocks_html_pdf(cell, img_src)))
     return '\n'.join(out)
 
 
@@ -358,8 +409,8 @@ def page_html(model, font_dir, embed=False):
            "display: flex; align-items: center; justify-content: center; overflow: hidden; }\n"
            ".cover img { max-width: 100%; max-height: 100%; }\n"
            ".b { font-weight: 700; } .i { font-style: italic; }\n"
-           "table { border-collapse: collapse; width: 100%; table-layout: fixed; } td { border: 0.5pt solid #000; "
-           "vertical-align: top; padding: 2pt 4pt; }\n")
+           "table { border-collapse: collapse; width: 100%; table-layout: fixed; } "
+           "td { vertical-align: top; padding: 2pt 4pt; } table.grid td { border: 0.5pt solid #000; }\n")
     body = _blocks_html_pdf(model['blocks'], lambda pic: asset_url(pic['path'], embed))
     return ('<!DOCTYPE html><html lang="bn"><head><meta charset="utf-8"><style>' + css +
             '</style></head><body>' + body + READY_SCRIPT + '</body></html>')
@@ -400,10 +451,13 @@ def export_epub(model, out_epub, font_dir, title=None):
     while k < len(blocks):
         b = blocks[k]
         if b['kind'] == 'table':
-            rows = ''.join('<tr>' + ''.join('<td>' + ''.join(
-                f'<p>{_runs_html(p["runs"], size_em)}</p>' for p in _paragraphs(cell)) + '</td>' for cell in row)
-                + '</tr>' for row in b['rows'])
-            book.add(f'<table>{rows}</table>')
+            def cell_html(cell):
+                # cell text keeps its alignment; left otherwise, as justifying a narrow
+                # column only opens gaps between words
+                return ''.join(
+                    f'<p class="{"c" if p["align"] == "center" else "r" if p["align"] in ("right", "end") else "l"}">'
+                    f'{_runs_html(p["runs"], size_em)}</p>' for p in _paragraphs(cell))
+            book.add(_table_html(b, cell_html))
             k += 1
             continue
         level = _heading_level(b, body)

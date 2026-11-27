@@ -41,6 +41,12 @@ figure { margin: 1em 0; text-align: center; page-break-inside: avoid; break-insi
 figure img { max-width: 100%%; border: 2px solid #000; box-sizing: border-box; }
 figure.cover img { border: 0; max-height: 100%%; }
 figcaption { font-size: 0.8em; line-height: 1.45; text-align: center; margin: 0.6em 1em 0; }
+table { border-collapse: collapse; width: 100%%; margin: 1em 0; }
+td { vertical-align: top; padding: 0.2em 0.4em; }
+table.grid td { border: 1px solid currentColor; }
+td p, td p.c { margin: 0; text-indent: 0; }
+p.l { text-align: left; }
+p.r { text-align: right; }
 """
 
 XHTML = ('<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE html>\n'
