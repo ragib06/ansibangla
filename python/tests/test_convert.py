@@ -133,7 +133,10 @@ def test_no_text_lost(src, tmp_path):
     table_words = []
     lines = list(_source_lines(src, table_words))
     for name, out in (('md', md), ('docx', docx), ('epub', epub)):
-        missing = [(p, t) for p, t in lines if t not in out]
+        def present(t):
+            # Markdown writes a list item's bullet ("● ") as its own "- " marker
+            return t in out or (name == 'md' and re.sub(r'^[●•▪◦■▸►]\s*', '', t) in out)
+        missing = [(p, t) for p, t in lines if not present(t)]
         assert not missing, f'{name}: lines missing, e.g. {missing[:3]}'
         missing = [(p, w) for p, w in table_words if w not in out]
         assert not missing, f'{name}: table words missing, e.g. {missing[:3]}'
@@ -396,9 +399,30 @@ def test_epub_footnotes_are_popup_notes(tmp_path):
     assert x.index('প্রথম অনুচ্ছেদ') < x.index('দ্বিতীয় অনুচ্ছেদ') < x.index('পাদটীকার লেখা')
 
 
+def test_picture_with_soft_mask_keeps_its_transparency(tmp_path):
+    """A picture drawn through a soft mask (black ink, the drawing in the mask) is saved
+    with the mask applied; without it, it came out as a black square."""
+    import types
+    import pymupdf
+    from ansibangla._common import save_images
+    ink = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 200, 100), True)    # transparent
+    ink.clear_with()                                    # all zero, alpha too: transparent
+    ink.set_rect(pymupdf.IRect(20, 40, 180, 50), (0, 0, 0, 255))                # one black stroke
+    doc = pymupdf.open()
+    page = doc.new_page(width=420, height=595)
+    page.insert_image(pymupdf.Rect(100, 100, 300, 200), pixmap=ink)             # stored with /SMask
+    assert any(img[1] for img in page.get_images(full=True))
+    layout = types.SimpleNamespace(page_w=420, page_h=595)
+    saved = save_images(doc, page, 0, str(tmp_path), layout)
+    pix = pymupdf.Pixmap(saved[0]['path'])
+    assert pix.alpha
+    assert pix.pixel(5, 5)[3] == 0 and pix.pixel(100, 45)[3] == 255     # clear ground, solid ink
+
+
 def test_epub_pictures_are_made_small(tmp_path):
     """Pictures go into the e-book at most EPUB_MAX_W x EPUB_MAX_H: photographs as JPEG,
-    diagrams (few colours) and transparent pictures as PNG, never bigger than before."""
+    diagrams (few colours) as PNG, never bigger than before; a transparent picture is drawn
+    on white, so black ink on a transparent ground does not vanish in night mode."""
     import random
     import pymupdf
     from ansibangla.epubexport import EPUB_MAX_H, EPUB_MAX_W, _web_image
@@ -412,9 +436,10 @@ def test_epub_pictures_are_made_small(tmp_path):
     diagram.set_rect(diagram.irect, (255, 255, 255))
     diagram.set_rect(pymupdf.IRect(100, 100, 300, 200), (0, 0, 0))
     diagram.save(str(tmp_path / 'diagram.png'))
-    glass = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 300, 200), True)
-    glass.set_rect(glass.irect, (200, 30, 30, 120))
-    glass.save(str(tmp_path / 'glass.png'))
+    ink = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 300, 200), True)   # transparent
+    ink.clear_with()                                    # all zero, alpha too: transparent
+    ink.set_rect(pymupdf.IRect(50, 50, 250, 60), (0, 0, 0, 255))                # a black stroke
+    ink.save(str(tmp_path / 'ink.png'))
 
     data, ext = _web_image(str(tmp_path / 'photo.png'))
     pix = pymupdf.Pixmap(data)
@@ -422,8 +447,10 @@ def test_epub_pictures_are_made_small(tmp_path):
     assert len(data) < os.path.getsize(tmp_path / 'photo.png') / 5
     data, ext = _web_image(str(tmp_path / 'diagram.png'))
     assert ext == '.png' and len(data) <= os.path.getsize(tmp_path / 'diagram.png')
-    data, ext = _web_image(str(tmp_path / 'glass.png'))
-    assert ext == '.png' and pymupdf.Pixmap(data).alpha
+    data, ext = _web_image(str(tmp_path / 'ink.png'))
+    pix = pymupdf.Pixmap(data)
+    assert not pix.alpha and (pix.width, pix.height) == (300, 200)
+    assert pix.pixel(10, 10)[:3] == (255, 255, 255) and pix.pixel(100, 55)[:3] == (0, 0, 0)
 
 
 @pytest.mark.skipif(not DOCX_SAMPLES, reason='no sample .docx files in sample/')
@@ -613,6 +640,34 @@ def test_epub_letter_spaced_heading_is_written_as_words():
     assert 'letter-spacing' not in CSS
 
 
+def test_pdf_footnotes_found_and_linked():
+    """A PDF footnote is smaller text below the page's body text starting with a mark; its
+    mark in the text (small and raised) is linked to it. A number counts only with a
+    matching raised number above (numbered captions and dates start with numbers too)."""
+    import types
+    from ansibangla.blocks import _footnote_mark, _link_mark, _mark_superscripts
+    layout = types.SimpleNamespace(body_size=12.5)
+
+    def line(spans, base, size):
+        return dict(spans=[dict(font='SutonnyMJ', text=t, size=s, origin=(72, base - rise))
+                           for t, s, rise in spans], base=base, mj_size=size, size=size, x0=72, x1=300)
+    body = line([('fvj Kv‡Ri K_v|', 12.5, 0), ('*', 8.0, 5.5), (' Avi', 12.5, 0)], 100, 12.5)
+    body2 = line([('Ab¨ K_v', 12.5, 0), ('2', 8.0, 5.5)], 120, 12.5)
+    note = line([('* GKwU UxKv', 11.0, 0)], 480, 11.0)
+    numbered = line([('2. Avi GKwU', 11.0, 0)], 495, 11.0)
+    caption = line([('15. GKwU Qwe', 11.0, 0)], 510, 11.0)
+    lines = [body, body2, note, numbered, caption]
+    _mark_superscripts(lines)
+    assert body['spans'][1].get('sup') and not body['spans'][0].get('sup')
+    lowest = 120
+    assert _footnote_mark(body, layout, lowest, lines) is None             # body-size text
+    assert _footnote_mark(note, layout, lowest, lines) == '*'
+    assert _footnote_mark(numbered, layout, lowest, lines) == '২'          # "২" is raised above
+    assert _footnote_mark(caption, layout, lowest, lines) is None          # no raised "১৫"
+    _link_mark(lines, '*', 7, lowest)
+    assert body['spans'][1].get('note') == 7 and 'note' not in note['spans'][0]
+
+
 def test_epub_title_page_fits_and_has_the_title_as_heading():
     """A title page keeps its lines together (the printed page's large gaps are cut to
     TITLE_PAGE_GAP, so it fits one screen) and its largest line is the <h1>."""
@@ -696,3 +751,29 @@ def test_keep_latin_words(tmp_path):
     with _keep_latin(['DNA']):
         assert convert_text('(DNA)') == '(DNA)'               # kept as typed
     assert convert_text('DNA') != 'DNA'                       # setting does not leak
+
+
+SAPIENS = os.path.join(SAMPLE_DIR, 'sapiens.pdf')
+
+
+@pytest.mark.skipif(not os.path.exists(SAPIENS), reason='no sapiens.pdf in sample/')
+def test_pdf_numbered_references_reflow_as_entries():
+    """A list of references: each entry starts with its number at the left margin and its
+    later lines hang to the right, in any font (English entries carry no SutonnyMJ). Each
+    entry is one paragraph; the next number always starts a new one; the bold chapter
+    titles between ("১.  ...") stay headings."""
+    import tempfile
+    import pymupdf
+    from ansibangla._common import Layout
+    from ansibangla.blocks import plain_line, read_blocks
+    doc = pymupdf.open(SAPIENS)
+    layout = Layout(doc)
+    doc.select([598, 618])                  # the first page of the references, and another
+    with tempfile.TemporaryDirectory() as tmp:
+        blocks = read_blocks(doc, layout, tmp)
+    entries = [' '.join(plain_line(l) for l in b['lines']) for b in blocks if b.get('numbered')]
+    starts = [e.split()[0] for e in entries]
+    assert starts == ['1', '1', '2', '3'] + [str(n) for n in range(3, 11)]
+    assert all(b['hang'] > 10 for b in blocks if b.get('numbered') and len(b['lines']) > 1)
+    assert 'Liangxue' not in next(e for e in entries if e.startswith('5 '))
+    assert not [b for b in blocks if b['kind'] == 'p' and not b.get('numbered')]

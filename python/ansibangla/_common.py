@@ -167,6 +167,26 @@ def _page_colour(doc, pages=8):
     return f'#{r:02X}{g:02X}{b:02X}'
 
 
+def _with_soft_mask(doc, xref):
+    """An image with its soft mask (/SMask) applied as its alpha channel. PyMuPDF loads such
+    an image without its mask: a diagram drawn as black ink through a mask (the colour
+    plane all black, the drawing in the mask) would come out as a black square."""
+    pix = fitz.Pixmap(doc, xref)
+    kind, value = doc.xref_get_key(xref, 'SMask')
+    if kind != 'xref':
+        return pix
+    try:
+        mask = fitz.Pixmap(doc, int(value.split()[0]))
+        base = fitz.Pixmap(pix, 0) if pix.alpha else pix         # colour planes only
+        if mask.n != 1 or (mask.width, mask.height) != (base.width, base.height):
+            mask = fitz.Pixmap(fitz.csGRAY, mask) if mask.n != 1 else mask
+            if (mask.width, mask.height) != (base.width, base.height):
+                mask = fitz.Pixmap(mask, base.width, base.height, None)
+        return fitz.Pixmap(base, mask)
+    except Exception:                                  # an odd mask: keep the image as it was
+        return pix
+
+
 def save_images(doc, page, page_no, img_dir, layout):
     """Save the pictures of one page. Returns dicts with bbox, path and cover flag."""
     saved = []
@@ -177,7 +197,7 @@ def save_images(doc, page, page_no, img_dir, layout):
         if _hidden(info, infos[k + 1:]):
             continue                                   # a backdrop under a later picture
         if info['xref']:
-            pix = fitz.Pixmap(doc, info['xref'])
+            pix = _with_soft_mask(doc, info['xref'])
             name = f'p{page_no + 1}_{info["xref"]}'
         else:
             # an inline image (inside the page's content stream) has no xref

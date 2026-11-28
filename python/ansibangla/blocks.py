@@ -8,6 +8,14 @@ Each block is a dict with:
     page     page index where the block starts
     lines    source lines (dicts from read_lines) for text blocks
     indented first line indented (paragraphs)
+    caption  the small text below a picture, read as one block even across a page break
+             (paragraphs)
+    footnote a footnote's number through the book (paragraphs), mark its mark ("*"); its
+             mark in the text above is a span with 'note' set to the same number
+    bullet   a list item starting with a bullet (paragraphs); hang is how far its later
+             lines sit right of the bullet (its hanging indent), in pt
+    numbered a numbered entry such as a reference (paragraphs), its later lines hanging
+             like a list item's (hang); its lines may be in any font and size
     spaced   letter-spaced heading whose spaces must be removed (centred lines)
     picture  dict from save_images (pictures)
 """
@@ -298,7 +306,10 @@ def read_blocks(doc, layout, img_dir):
     os.makedirs(img_dir, exist_ok=True)
     blocks = []
     open_para = None        # a body paragraph may continue on the next line or page
-    prev_line = None
+    held = None             # a body paragraph paused by a picture, a table or smaller text
+    caption = None          # True right after a picture, then the caption block being read
+    notes_seen = [0]        # footnotes numbered through the book, for links to them
+    in_list = False         # in a list of numbered entries (references, endnotes)
 
     for page_no, page in enumerate(doc):
         tables = find_tables(page, layout)
@@ -309,33 +320,161 @@ def read_blocks(doc, layout, img_dir):
         for pic in save_images(doc, page, page_no, img_dir, layout):
             items.append(dict(picture=pic, y=pic['bbox'][1]))
         items.sort(key=lambda d: d['y'])
+        page_lines = [it['line'] for it in items if 'line' in it and it['line']['base'] <= layout.foot_y]
+        _mark_superscripts(page_lines)
+        # footnotes: smaller text below all of the page's body-size text
+        lowest_body = max((l['base'] for l in page_lines if _normal_line(l, layout)), default=0.0)
 
         for item in items:
-            if 'table' in item:
-                blocks.append(item['table'])
+            if 'table' in item or 'picture' in item:
+                # a picture or table pauses a paragraph that runs past it (on to the next
+                # page, often); the text below it may be its caption, which must not join it
+                blocks.append(item['table'] if 'table' in item else
+                              dict(kind='img', page=page_no, picture=item['picture']))
+                if open_para and _normal(open_para, layout):
+                    held = open_para
                 open_para = None
-                continue
-            if 'picture' in item:
-                blocks.append(dict(kind='img', page=page_no, picture=item['picture']))
-                open_para = None
+                caption = 'picture' in item         # small text right below may be its caption
                 continue
             line = item['line']
             if line['base'] > layout.foot_y:
                 blocks.append(dict(kind='num', page=page_no, lines=[line]))
                 continue
+            if caption and not _normal_line(line, layout) and line['mj_size'] \
+                    and not _footnote_mark(line, layout, lowest_body):
+                # a picture's caption: all the small text below it, centred lines and all,
+                # even where it carries on at the top of the next page
+                if not isinstance(caption, dict):
+                    caption = dict(kind='p', page=page_no, lines=[], indented=False, caption=True)
+                    blocks.append(caption)
+                caption['lines'].append(line)
+                continue
+            caption = None
+            numbered = _ENTRY.match(plain_line(line)) or \
+                in_list and _ENTRY_NEXT.match(plain_line(line))
+            if abs(line['x0'] - layout.body_l) < 2 and numbered \
+                    and not all('Bold' in sp['font'] for sp in line['spans'] if sp['text'].strip()):
+                # (bold: a chapter's heading in a list of notes, "১.  ...")
+                # a numbered entry (a reference, an endnote), whatever its font: Latin-only
+                # lines count too, and its later lines hang at the text's left edge
+                open_para = dict(kind='p', page=page_no, lines=[line], indented=False,
+                                 numbered=True, hang=0.0)
+                held, in_list = None, True
+                blocks.append(open_para)
+                continue
+            if (open_para and (open_para.get('numbered') or
+                               open_para.get('bullet') and _same_size(open_para, line))
+                    and open_para['lines'][0]['x0'] + 4 < line['x0'] <= open_para['lines'][0]['x0'] + 40):
+                open_para['lines'].append(line)     # a list item's line at its hanging indent
+                open_para['hang'] = line['x0'] - open_para['lines'][0]['x0']
+                continue
             if layout.is_body(line):
-                if not open_para or layout.is_indented(line) or (prev_line and layout.is_short(prev_line)):
+                # carry on the open paragraph, or one paused by a picture or by smaller text
+                # (a caption, a note), if this line is the same size, not indented and the
+                # paragraph's last line ran to the right edge
+                cand = open_para if open_para and _same_size(open_para, line) else \
+                    held if held and _same_size(held, line) else None
+                note_mark = _footnote_mark(line, layout, lowest_body, page_lines)
+                if cand and not layout.is_indented(line) and not layout.is_short(cand['lines'][-1]) \
+                        and not _BULLET.match(plain_line(line)) and not note_mark:
+                    if cand is held:
+                        held = None
+                    open_para = cand
+                else:
+                    if open_para and _normal(open_para, layout) and not _normal_line(line, layout):
+                        held = open_para            # smaller text in between: pause the paragraph
+                    elif _normal_line(line, layout):
+                        held = None
                     open_para = dict(kind='p', page=page_no, lines=[], indented=layout.is_indented(line))
+                    in_list = False
+                    if _BULLET.match(plain_line(line)):
+                        open_para.update(bullet=True, indented=False, hang=0.0)
+                    if note_mark:                   # a footnote, linked from its mark above
+                        notes_seen[0] += 1
+                        open_para.update(footnote=notes_seen[0], mark=note_mark, indented=False)
+                        _link_mark(page_lines, note_mark, notes_seen[0], lowest_body)
                     blocks.append(open_para)
                 open_para['lines'].append(line)     # page-number blocks may sit in between
-                prev_line = line
             elif layout.is_centred(line):
-                open_para = None
+                open_para = held = None
+                in_list = False
                 large = line['mj_size'] > layout.body_size + 1.5
                 blocks.append(dict(kind='h' if large else 'c', page=page_no, lines=[line],
                                    spaced=is_letter_spaced(line)))
             else:
-                open_para = None
+                open_para = held = None
                 kind = 's' if is_subheading(line, layout) else 'l'
                 blocks.append(dict(kind=kind, page=page_no, lines=[line]))
     return blocks
+
+
+# a footnote's mark at the start of the note: * † ‡ § (repeated), or a number before a
+# space or full stop
+_NOTE_MARK = re.compile(r'^\s*([*†‡§¶]+|[0-9০-৯]{1,3}(?=[\s.)]))')
+
+
+def _footnote_mark(line, layout, lowest_body, page_lines=None):
+    """The mark of a footnote starting at this line, or None: smaller text below all of the
+    page's body-size text, beginning with a mark. A number counts only when the same
+    number is raised in the page's text above (given page_lines): numbered captions and a
+    date under a preface start with numbers too, and numbers in the text often point to
+    notes at the end of the book instead."""
+    if _normal_line(line, layout) or line['base'] <= lowest_body:
+        return None
+    m = _NOTE_MARK.match(plain_line(line))
+    if not m:
+        return None
+    mark = m.group(1)
+    if mark[0] in '*†‡§¶':
+        return mark
+    if page_lines is not None and any(
+            span.get('sup') and 'note' not in span and span_text(span).strip() == mark
+            for l in page_lines if l['base'] <= lowest_body for span in l['spans']):
+        return mark
+    return None
+
+
+def _mark_superscripts(lines):
+    """Spans set small and raised above their line's baseline (note marks such as "*" or
+    "১") get 'sup', so outputs can show them as superscripts."""
+    for line in lines:
+        size = line['mj_size'] or line['size']
+        for span in line['spans']:
+            if span['text'].strip() and span['size'] <= 0.8 * size and span['origin'][1] < line['base'] - 1.5:
+                span['sup'] = True
+
+
+def _link_mark(lines, mark, note, lowest_body):
+    """Link a footnote to its mark in the page's body text: the first superscript span with
+    that mark (converted) not yet linked gets 'note'."""
+    for line in lines:
+        if line['base'] > lowest_body:
+            continue                                # the notes themselves
+        for span in line['spans']:
+            if span.get('sup') and 'note' not in span and span_text(span).strip() == mark:
+                span['note'] = note
+                return
+
+
+# a numbered entry: its number, then two spaces or more (a tab, often) before the text;
+# a line of a paragraph that happens to start with a number has one space
+_ENTRY = re.compile(r'^\s*[0-9০-৯]{1,3}\.?\s{2,}\S')
+# in a list already, one space does (the tab after "10" is narrower)
+_ENTRY_NEXT = re.compile(r'^\s*[0-9০-৯]{1,3}\.?\s+\S')
+
+# a list item: a bullet, then its text (later lines sit at the text's own left edge)
+_BULLET = re.compile(r'^\s*[●•▪◦■▸►]\s')
+
+
+def _same_size(para, line):
+    """A line in the size of the paragraph's text (within 1 pt)."""
+    return abs(para['lines'][-1]['mj_size'] - line['mj_size']) <= 1.0
+
+
+def _normal_line(line, layout):
+    """Body-size text, not smaller text such as a caption or a note."""
+    return line['mj_size'] >= layout.body_size - 1.0
+
+
+def _normal(para, layout):
+    return _normal_line(para['lines'][-1], layout)

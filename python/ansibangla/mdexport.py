@@ -66,7 +66,11 @@ def export_markdown(doc, layout, img_dir, img_ref, blocks=None):
                 if parts and not parts[-1].endswith('-'):
                     text = ' ' + text
                 parts.append(text)
-            out.append(('&emsp;&emsp;' if block['indented'] else '') + ''.join(parts))
+            text = ''.join(parts)
+            if block.get('bullet'):                 # a list item: a Markdown list item
+                out.append('- ' + re.sub(r'^\s*[●•▪◦■▸►]\s*', '', text))
+            else:
+                out.append(('&emsp;&emsp;' if block['indented'] else '') + text)
         elif kind in ('h', 'c'):
             line = block['lines'][0]
             text = _escape(despace(plain_line(line))) if block['spaced'] else _md_line(line)

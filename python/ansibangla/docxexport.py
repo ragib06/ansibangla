@@ -145,7 +145,7 @@ def _text_of(line):
 
 # ---------------------------------------------------------------- paragraphs
 
-def _ppr(*, jc='left', before=0.0, lh=None, first_indent=0.0, left=0.0, page_break=False):
+def _ppr(*, jc='left', before=0.0, lh=None, first_indent=0.0, left=0.0, page_break=False, hanging=0.0):
     out = []
     if page_break:
         out.append('<w:pageBreakBefore/>')
@@ -154,7 +154,9 @@ def _ppr(*, jc='left', before=0.0, lh=None, first_indent=0.0, left=0.0, page_bre
     if lh:
         spacing += f' w:line="{_tw(lh)}" w:lineRule="exact"'
     out.append(spacing + '/>')
-    if first_indent or left:
+    if hanging:                                 # a list item: its first line starts further left
+        out.append(f'<w:ind w:left="{_tw(left)}" w:hanging="{_tw(hanging)}"/>')
+    elif first_indent or left:
         out.append(f'<w:ind w:left="{_tw(left)}" w:firstLine="{_tw(first_indent)}"/>')
     out.append(f'<w:jc w:val="{jc}"/>')
     return '<w:pPr>' + ''.join(out) + '</w:pPr>'
@@ -224,6 +226,15 @@ def _same_row(block, other):
     _, b0, _, b1 = other['picture']['bbox']
     overlap = min(a1, b1) - max(a0, b0)
     return overlap > 0.5 * min(a1 - a0, b1 - b0)
+
+
+def _position(block):
+    """(page, top) of a block, to put a page's pieces in order (stable for equal tops)."""
+    if block['kind'] == 'img':
+        return block['page'], block['picture']['bbox'][1]
+    if block['kind'] == 'table':
+        return block['page'], block['bbox'][1]
+    return block['page'], block['lines'][0]['base']
 
 
 def _split_at_pages(blocks):
@@ -357,7 +368,10 @@ def export_docx(doc, layout, blocks, out_path, font_dir):
             raise FileNotFoundError(f'missing font {name} in {font_dir}')
     heights = _line_heights(blocks)
     body_lh = heights.get(round(layout.body_size, 1), layout.body_size * 1.2)
-    text_blocks = _split_at_pages(b for b in blocks if b['kind'] != 'num')
+    # each source page's pieces top to bottom: a paragraph that runs past a picture (and
+    # its caption) on to the next page is one block, which comes before the picture in
+    # reading order; its piece on the next page belongs after the caption's
+    text_blocks = sorted(_split_at_pages(b for b in blocks if b['kind'] != 'num'), key=_position)
 
     # margins: the text column and the highest / lowest text on the pages
     extents = [_extent(b, _line_height(b, heights, layout)) for b in text_blocks
@@ -457,7 +471,12 @@ def export_docx(doc, layout, blocks, out_path, font_dir):
             prev = (page, top, page, bottom, None, None)
             continue
 
-        if kind == 'p':
+        if kind == 'p' and (b.get('bullet') or b.get('numbered')):
+            hang = b.get('hang') or 0.9 * layout.body_size
+            ppr = _ppr(jc='both', before=before, lh=lh, page_break=page_break, hanging=hang,
+                       left=max(b['lines'][0]['x0'] - left_margin, 0) + hang)
+            body.append(_body_para(b, layout, ppr))
+        elif kind == 'p':
             ppr = _ppr(jc='both', before=before, lh=lh, page_break=page_break,
                        first_indent=18.0 if b['indented'] else 0.0)
             body.append(_body_para(b, layout, ppr))

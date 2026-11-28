@@ -93,8 +93,26 @@ def _line_html(line, layout, first=True):
         if not text:
             continue
         prev_space = text.endswith(' ')
-        out.append(_span_html(span, text))
+        if span.get('note'):                    # a footnote's mark: a link to the pop-up note
+            n = span['note']
+            out.append(f'<sup><a epub:type="noteref" role="doc-noteref" class="nr" id="fnref{n}" '
+                       f'href="#fn{n}">{_esc(text.strip())}</a></sup>')
+        elif span.get('sup'):                   # set small and raised in the source
+            out.append(f'<sup>{_span_html(span, text)}</sup>')
+        else:
+            out.append(_span_html(span, text))
     return ''.join(out).strip()
+
+
+def _footnote_aside(block, layout):
+    """A footnote found in the PDF as an EPUB 3 pop-up note: its mark (linking back to the
+    text) and its lines without the mark."""
+    n, mark = block['footnote'], block['mark']
+    html = join_lines(_line_html(line, layout, first=(k == 0)) for k, line in enumerate(block['lines']))
+    # drop the mark the note starts with; the back link shows it instead
+    html = re.sub(r'^((?:<[^>]+>)*)\s*' + re.escape(mark) + r'\s*', r'\1', html, count=1)
+    return (f'<aside epub:type="footnote" role="doc-footnote" id="fn{n}" class="fn"><p>'
+            f'<a href="#fnref{n}" role="doc-backlink">{_esc(mark)}</a> {html}</p></aside>')
 
 
 class _Book:
@@ -201,6 +219,11 @@ def export_epub(doc, layout, blocks, out_path, font_dir, *, title=None):
         if kind == 'table':
             book.add(book.marker(b['page']) + _table_html(b, layout))
             continue
+        if b.get('footnote'):
+            # a pop-up note at the end of the chapter, not a paragraph wherever the source
+            # page happened to end in the reflowed text
+            book.chapters[-1].setdefault('notes', []).append(_footnote_aside(b, layout))
+            continue
 
         line = b['lines'][0]
         small = line['mj_size'] and line['mj_size'] < layout.body_size - 1.0
@@ -258,7 +281,14 @@ def export_epub(doc, layout, blocks, out_path, font_dir, *, title=None):
                 prev_line = line_
             classes = ' '.join(c for c in ('ind' if b['indented'] else '', 'small' if small else '') if c)
             attr = f' class="{classes}"' if classes else ''
-            book.add(f'<p{attr}{_style(space_style(k))}>{"".join(pieces)}</p>')
+            style = space_style(k)
+            if b.get('bullet') or b.get('numbered'):     # a list item: its bullet hangs in the margin
+                hang = (b.get('hang') or 0.9 * layout.body_size) / layout.body_size
+                left = max(b['lines'][0]['x0'] - layout.body_l, 0) / layout.body_size + hang
+                style = '; '.join(s for s in (f'margin-left:{left:.2f}em; text-indent:-{hang:.2f}em', style) if s)
+                if b.get('numbered'):           # references: long URLs would stretch justified lines
+                    style += '; text-align:left'
+            book.add(f'<p{attr}{_style(style)}>{"".join(pieces)}</p>')
 
     book.chapters = [c for c in book.chapters if c['parts']]
     if not book.chapters:
@@ -296,7 +326,10 @@ def _table_html(block, layout):
 
 
 def _is_caption(block, picture, layout):
-    """Text in a smaller size on the picture's page, below it (the caption)."""
+    """Text in a smaller size on the picture's page, below it (the caption), or the block
+    read as the picture's caption (which may carry on at the top of the next page)."""
+    if block.get('caption'):
+        return True
     if block['kind'] not in ('p', 'l', 'c') or block['page'] != picture['page']:
         return False
     line = block['lines'][0]
@@ -380,12 +413,21 @@ EPUB_MAX_W, EPUB_MAX_H = 1600, 2560      # the usual e-book limit, sharp on high
 JPEG_QUALITY = 85                        # no visible loss at reading size
 
 
+def _on_white(pix):
+    """A picture with transparency drawn on white: e-readers in night mode put pages on a
+    dark background, where a diagram in black ink on a transparent ground would vanish."""
+    doc = fitz.open()
+    page = doc.new_page(width=pix.width, height=pix.height)
+    page.insert_image(page.rect, pixmap=pix)
+    return page.get_pixmap(dpi=72, alpha=False)          # one pixel per point: the same size
+
+
 def _web_image(path):
     """A picture ready for the e-book: (bytes, extension). Scaled down to fit
-    EPUB_MAX_W x EPUB_MAX_H; photographs (many colours, nothing transparent) saved as
-    JPEG, other pictures as PNG so diagrams and transparency stay exact. Whichever is
-    smaller of that and the original file is used; a picture that cannot be read is
-    kept as it is."""
+    EPUB_MAX_W x EPUB_MAX_H; anything transparent drawn on white (see _on_white);
+    photographs (many colours) saved as JPEG, other pictures as PNG so diagrams stay exact.
+    Whichever is smaller of that and the original file is used (the new one always when it
+    was put on white); a picture that cannot be read is kept as it is."""
     with open(path, 'rb') as fh:
         data = fh.read()
     ext = os.path.splitext(path)[1].lower()
@@ -393,23 +435,24 @@ def _web_image(path):
         return data, ext                         # gif (may be animated), svg, webp: as they are
     try:
         pix = fitz.Pixmap(data)
-        transparent = False
+        flattened = False
         if pix.alpha:
-            transparent = min(pix.samples[pix.n - 1::pix.n]) < 255
-            if not transparent:
+            if min(pix.samples[pix.n - 1::pix.n]) < 255:
+                pix, flattened = _on_white(pix), True
+            else:
                 pix = fitz.Pixmap(pix, 0)        # an alpha channel that hides nothing
         if pix.colorspace is not None and pix.colorspace.n not in (1, 3):
             pix = fitz.Pixmap(fitz.csRGB, pix)   # CMYK and the like
         scale = min(1.0, EPUB_MAX_W / pix.width, EPUB_MAX_H / pix.height)
         if scale < 1:
             pix = fitz.Pixmap(pix, max(1, round(pix.width * scale)), max(1, round(pix.height * scale)), None)
-        if not transparent and pix.color_count() > 256:
+        if pix.color_count() > 256:
             new, new_ext = pix.tobytes('jpg', jpg_quality=JPEG_QUALITY), '.jpg'
         else:
             new, new_ext = pix.tobytes('png'), '.png'
     except Exception:                            # not a picture PyMuPDF can read
         return data, ext
-    return (new, new_ext) if len(new) < len(data) else (data, ext)
+    return (new, new_ext) if flattened or len(new) < len(data) else (data, ext)
 
 
 def _write_package(out_path, book, images, cover, title, font_dir, line_height):
