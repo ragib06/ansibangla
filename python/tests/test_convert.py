@@ -777,3 +777,15 @@ def test_pdf_numbered_references_reflow_as_entries():
     assert all(b['hang'] > 10 for b in blocks if b.get('numbered') and len(b['lines']) > 1)
     assert 'Liangxue' not in next(e for e in entries if e.startswith('5 '))
     assert not [b for b in blocks if b['kind'] == 'p' and not b.get('numbered')]
+
+
+def test_pdf_without_sutonnymj_text_gives_a_clear_error(tmp_path):
+    """A PDF with no SutonnyMJ text (already Unicode, another font, a scan) is refused with
+    a message saying so, not a crash."""
+    import pymupdf
+    src = tmp_path / 'unicode.pdf'
+    doc = pymupdf.open()
+    doc.new_page().insert_text((72, 72), 'Already plain text.', fontsize=12)
+    doc.save(src)
+    with pytest.raises(ValueError, match='no SutonnyMJ'):
+        convert_pdf(str(src), str(tmp_path))

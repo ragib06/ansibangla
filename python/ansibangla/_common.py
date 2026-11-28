@@ -96,6 +96,9 @@ class Layout:
         all_lines = [l for page in doc for l in read_lines(page)]
         self.foot_y = self._footer_line(all_lines)
         mj_lines = [l for l in all_lines if any(is_mj(s['font']) for s in l['spans'])]
+        if not mj_lines:
+            raise ValueError('no SutonnyMJ (Bijoy) text found: the file may be in Unicode '
+                             'already, set in another font, or a scan with no text')
         # Left edge of the body column: the most common left edge of SutonnyMJ lines
         self.body_l = Counter(round(l['x0']) for l in mj_lines).most_common(1)[0][0]
         at_margin = [l for l in mj_lines if abs(l['x0'] - self.body_l) < 3]
