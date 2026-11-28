@@ -17,7 +17,7 @@ import zipfile
 import pymupdf as fitz
 
 from ._common import is_mj, span_text
-from .blocks import despace, plain_line
+from .blocks import cell_paragraphs, despace, join_lines, plain_line
 from .docxexport import _bn_number, _line_heights
 from .pdfbuild import FONT_FILES
 
@@ -46,6 +46,8 @@ figcaption { font-size: 0.8em; line-height: 1.45; text-align: center; margin: 0.
 table { border-collapse: collapse; width: 100%%; margin: 1em 0; }
 td { vertical-align: top; padding: 0.2em 0.4em; }
 table.grid td { border: 1px solid currentColor; }
+table.rules td { border-top: 1px solid currentColor; }
+table.rules tr:last-child td { border-bottom: 1px solid currentColor; }
 td p, td p.c { margin: 0; text-indent: 0; }
 p.l { text-align: left; }
 p.r { text-align: right; }
@@ -149,7 +151,7 @@ def export_epub(doc, layout, blocks, out_path, font_dir, *, title=None):
     def extra_before(k):
         """Space above block k beyond normal line spacing, in source pt, measured from the
         previous text line on the same page; None at a page top or after a picture."""
-        if k == 0 or seq[k - 1]['kind'] in ('img', 'h') or k - 1 in captions:
+        if k == 0 or seq[k - 1]['kind'] in ('img', 'h', 'table') or k - 1 in captions:
             return None                     # figures and chapter titles have CSS margins
         prev, first = seq[k - 1]['lines'][-1], seq[k]['lines'][0]
         if prev['page'] != first['page']:
@@ -196,6 +198,9 @@ def export_epub(doc, layout, blocks, out_path, font_dir, *, title=None):
             continue
         if k in captions:
             continue                            # written inside its figure
+        if kind == 'table':
+            book.add(book.marker(b['page']) + _table_html(b, layout))
+            continue
 
         line = b['lines'][0]
         small = line['mj_size'] and line['mj_size'] < layout.body_size - 1.0
@@ -261,6 +266,26 @@ def export_epub(doc, layout, blocks, out_path, font_dir, *, title=None):
 
     _write_package(out_path, book, images, cover, title, font_dir, line_height)
     return out_path
+
+
+def _table_html(block, layout):
+    """A table found in the PDF: merged cells as colspan / rowspan, borders all round for a
+    ruled table, rules between rows for one drawn with horizontal rules only."""
+    rows = []
+    for row in block['rows']:
+        cells = []
+        for cell in row:
+            if cell['merged']:
+                continue
+            attrs = (f' colspan="{cell["colspan"]}"' if cell['colspan'] > 1 else '') + \
+                    (f' rowspan="{cell["rowspan"]}"' if cell['rowspan'] > 1 else '')
+            paras = ''.join(
+                f'<p class="{"c" if align == "center" else "l"}">'
+                + join_lines(_line_html(line, layout) for line in lines) + '</p>'
+                for lines, align in cell_paragraphs(cell))
+            cells.append(f'<td{attrs}>{paras}</td>')
+        rows.append('<tr>' + ''.join(cells) + '</tr>')
+    return f'<table class="{"grid" if block["ruled"] else "rules"}">' + ''.join(rows) + '</table>'
 
 
 def _is_caption(block, picture, layout):

@@ -4,7 +4,7 @@ import os
 import re
 
 from ._common import is_mj, span_text
-from .blocks import despace, plain_line, read_blocks
+from .blocks import cell_paragraphs, despace, join_lines, plain_line, read_blocks
 
 
 def _escape(text):
@@ -36,6 +36,21 @@ def _md_line(line):
     return ''.join(_md_span(s) for s in line['spans'] if s['text']).strip()
 
 
+def _md_table(block):
+    """A table as a GFM table, the first row as its header. Markdown has no merged cells:
+    a merged cell's text sits in its first cell and the cells it covers stay empty."""
+    def cell_text(cell):
+        if cell['merged']:
+            return ''
+        paras = [join_lines(_md_line(line) for line in lines) for lines, _ in cell_paragraphs(cell)]
+        return '<br>'.join(p.replace('|', '\\|') for p in paras)
+
+    rows = [[cell_text(c) for c in row] for row in block['rows']]
+    lines = ['| ' + ' | '.join(rows[0]) + ' |', '|' + '---|' * len(rows[0])]
+    lines += ['| ' + ' | '.join(r) + ' |' for r in rows[1:]]
+    return '\n'.join(lines)
+
+
 def export_markdown(doc, layout, img_dir, img_ref, blocks=None):
     """Markdown text. Pictures are saved to img_dir and linked as img_ref/<file>."""
     os.makedirs(img_dir, exist_ok=True)
@@ -65,6 +80,8 @@ def export_markdown(doc, layout, img_dir, img_ref, blocks=None):
             out.append(text)
         elif kind == 'img':
             out.append(f"![]({img_ref}/{os.path.basename(block['picture']['path'])})")
+        elif kind == 'table':
+            out.append(_md_table(block))
         else:
             continue                    # page number: the page break replaces it
         out.append('')

@@ -81,16 +81,27 @@ def test_font_obfuscation_round_trip():
     assert _obfuscate(hidden, key) == data
 
 
-def _source_lines(src):
+def _source_lines(src, table_words=None):
     """Plain text of every source line except page numbers (digits alone) and
-    letter-spaced headings. Deliberately independent of the converter's footer zone."""
+    letter-spaced headings. Deliberately independent of the converter's footer zone.
+
+    A line inside a table runs across its columns ("১৩৫০ কোটি" + "পদার্থ ও শক্তির"), which
+    no output keeps whole once the cells are separated; its words go to table_words (a
+    list) instead, for a check word by word."""
     import pymupdf
-    from ansibangla._common import read_lines
-    from ansibangla.blocks import is_letter_spaced, plain_line
-    for page in pymupdf.open(src):
+    from ansibangla._common import Layout, read_lines
+    from ansibangla.blocks import find_tables, is_letter_spaced, plain_line
+    doc = pymupdf.open(src)
+    layout = Layout(doc)
+    for page in doc:
+        tables = [t['bbox'] for t in find_tables(page, layout)]
         for line in read_lines(page):
             text = ' '.join(plain_line(line).split())
             if not text or is_letter_spaced(line) or re.fullmatch(r'[০-৯0-9]+', text):
+                continue
+            if any(b.x0 - 1 <= line['x0'] <= b.x1 and b.y0 - 1 <= line['base'] <= b.y1 + 1 for b in tables):
+                if table_words is not None:
+                    table_words += [(page.number, w) for w in text.split()]
                 continue
             yield page.number, text
 
@@ -119,9 +130,13 @@ def test_no_text_lost(src, tmp_path):
                         if n.startswith('OEBPS/text/'))
     import html as htmllib
     epub = _flat(htmllib.unescape(re.sub(r'<[^>]+>', '', html)))
+    table_words = []
+    lines = list(_source_lines(src, table_words))
     for name, out in (('md', md), ('docx', docx), ('epub', epub)):
-        missing = [(p, t) for p, t in _source_lines(src) if t not in out]
+        missing = [(p, t) for p, t in lines if t not in out]
         assert not missing, f'{name}: lines missing, e.g. {missing[:3]}'
+        missing = [(p, w) for p, w in table_words if w not in out]
+        assert not missing, f'{name}: table words missing, e.g. {missing[:3]}'
 
 
 @pytest.mark.skipif(not SAMPLES, reason='no sample PDFs in sample/')
@@ -582,6 +597,44 @@ def test_printable_html_is_self_contained(src, tmp_path):
     assert all(u.startswith('data:image/') for u in re.findall(r'<img [^>]*src="([^"]*)"', page))
     assert 'dataset.ready' in page
     assert any('ঀ' <= ch <= '৿' for ch in page)
+
+
+def test_pdf_tables_found_ruled_and_rules_only():
+    """Tables in a PDF: a ruled one (borders all round) with its cells, and one drawn with
+    horizontal rules only (a timeline), its columns found from where its text starts. A
+    page without tables gets none."""
+    import types
+    import pymupdf
+    from ansibangla.blocks import _table_block, find_tables, plain_line
+    layout = types.SimpleNamespace(body_l=50, body_r=370)
+    doc = pymupdf.open()
+    page = doc.new_page(width=420, height=595)
+    xs, ys = [50, 200, 370], [60, 80, 100, 120]
+    for y in ys:
+        page.draw_line((xs[0], y), (xs[-1], y))
+    for x in xs:
+        page.draw_line((x, ys[0]), (x, ys[-1]))
+    for r in range(3):
+        for c in range(2):
+            page.insert_text((xs[c] + 4, ys[r] + 14), f'R{r}C{c}', fontsize=10)
+    rows = [200 + 22 * k for k in range(5)]
+    for y in rows:                                    # rules drawn as thin filled rectangles
+        page.draw_rect(pymupdf.Rect(50, y, 370, y + 0.6), fill=(0, 0, 0), color=None)
+    for r in range(4):
+        page.insert_text((52, rows[r] + 15), f'T{r}', fontsize=10)
+        page.insert_text((160, rows[r] + 15), f'text {r} here', fontsize=10)
+    tables = sorted(find_tables(page, layout), key=lambda t: t['bbox'].y0)
+    assert [t['ruled'] for t in tables] == [True, False]
+
+    def texts(t):
+        block = _table_block(page, 0, t)
+        return [[' '.join(plain_line(l) for l in cell['lines']) for cell in row] for row in block['rows']]
+    assert texts(tables[0]) == [['R0C0', 'R0C1'], ['R1C0', 'R1C1'], ['R2C0', 'R2C1']]
+    assert texts(tables[1]) == [[f'T{r}', f'text {r} here'] for r in range(4)]
+    plain = doc.new_page(width=420, height=595)
+    plain.insert_text((50, 60), 'No table here.', fontsize=10)
+    plain.draw_line((50, 70), (370, 70))                 # a single rule is not a table
+    assert find_tables(plain, layout) == []
 
 
 def test_formats_are_only_what_was_asked(tmp_path):

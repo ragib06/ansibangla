@@ -60,7 +60,7 @@ def _line_heights(blocks):
 
 
 def _line_height(block, heights, layout):
-    if block['kind'] == 'img':
+    if block['kind'] in ('img', 'table'):
         return None
     line = block['lines'][0]
     size = line['mj_size'] or line['size']
@@ -74,6 +74,9 @@ def _extent(block, lh):
     if block['kind'] == 'img':
         x0, y0, x1, y1 = block['picture']['bbox']
         return block['page'], y0 - PICTURE_FRAME, block['page'], y1 + PICTURE_FRAME
+    if block['kind'] == 'table':
+        x0, y0, x1, y1 = block['bbox']
+        return block['page'], y0, block['page'], y1
     first, last = block['lines'][0], block['lines'][-1]
     return (first['page'], first['base'] - ASCENT * lh,
             last['page'], last['base'] + (1 - ASCENT) * lh)
@@ -167,6 +170,50 @@ def _body_para(block, layout, ppr):
             runs.append(_run(' ', _rpr(bengali, span['size'] * (layout.scale if bengali else 1))))
         runs.extend(line_runs)
     return f'<w:p>{ppr}{"".join(runs)}</w:p>'
+
+
+def _table_xml(block, layout, left):
+    """A table found in the PDF as a Word table: the source's column widths and line
+    spacing, merged cells (gridSpan / vMerge), borders all round for a ruled table or rules
+    between rows for one drawn with horizontal rules only. Cells get a little padding at top
+    and bottom, as Noto's marks reach past an exact line (see docxinput.CELL_PAD)."""
+    from .blocks import cell_paragraphs
+    lines = block['lines']
+    gaps = sorted(b['base'] - a['base'] for a, b in zip(lines, lines[1:])
+                  if 0 < b['base'] - a['base'] < 2.5 * (a['mj_size'] or a['size']))
+    size = max((l['mj_size'] or l['size'] for l in lines), default=layout.body_size)
+    lh = gaps[len(gaps) // 2] if gaps else size * 1.3 * layout.scale
+    pad = 0.2 * size * layout.scale
+    on, off = 'w:val="single" w:sz="4" w:space="0" w:color="000000"', 'w:val="nil"'
+    sides = dict(top=on, left=on, bottom=on, right=on, insideH=on, insideV=on) if block['ruled'] else \
+        dict(top=on, left=off, bottom=on, right=off, insideH=on, insideV=off)
+    borders = ''.join(f'<w:{s} {v}/>' for s, v in sides.items())
+    widths = [_tw(w) for w in block['widths']]
+    out = [f'<w:tbl><w:tblPr><w:tblW w:w="{sum(widths)}" w:type="dxa"/>'
+           f'<w:tblInd w:w="{_tw(left)}" w:type="dxa"/><w:tblBorders>{borders}</w:tblBorders>'
+           f'<w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="{_tw(pad)}" w:type="dxa"/>'
+           f'<w:left w:w="{_tw(3)}" w:type="dxa"/><w:bottom w:w="{_tw(pad)}" w:type="dxa"/>'
+           f'<w:right w:w="{_tw(3)}" w:type="dxa"/></w:tblCellMar></w:tblPr>'
+           '<w:tblGrid>' + ''.join(f'<w:gridCol w:w="{w}"/>' for w in widths) + '</w:tblGrid>']
+    for row in block['rows']:
+        cells = []
+        for c, cell in enumerate(row):
+            if cell['merged'] == 'col':
+                continue                          # inside the gridSpan of the cell to its left
+            if cell['merged'] == 'row':           # below a cell merged downwards
+                cells.append(f'<w:tc><w:tcPr><w:tcW w:w="{widths[c]}" w:type="dxa"/><w:vMerge/></w:tcPr><w:p/></w:tc>')
+                continue
+            span = cell['colspan']
+            pr = f'<w:tcW w:w="{sum(widths[c:c + span])}" w:type="dxa"/>'
+            if span > 1:
+                pr += f'<w:gridSpan w:val="{span}"/>'
+            if cell['rowspan'] > 1:
+                pr += '<w:vMerge w:val="restart"/>'
+            paras = [_body_para(dict(lines=lines), layout, _ppr(jc=align, lh=lh))
+                     for lines, align in cell_paragraphs(cell)] or ['<w:p/>']
+            cells.append(f'<w:tc><w:tcPr>{pr}</w:tcPr>{"".join(paras)}</w:tc>')
+        out.append('<w:tr><w:trPr><w:cantSplit/></w:trPr>' + ''.join(cells) + '</w:tr>')
+    return ''.join(out) + '</w:tbl>'
 
 
 def _same_row(block, other):
@@ -365,6 +412,15 @@ def export_docx(doc, layout, blocks, out_path, font_dir):
         page_break = prev is not None and page > prev[2]      # each source page starts a page
         before = max(top - (top_margin if prev is None or page_break else prev[3]), 0.0)
 
+        if kind == 'table':
+            # a table takes no spacing of its own: a tiny paragraph carries the space above
+            # it and the start of a new page
+            if page_break or before > 1:
+                body.append(f'<w:p>{_ppr(before=max(before - 1, 0), lh=1, page_break=page_break)}</w:p>')
+            body.append(_table_xml(b, layout, b['bbox'][0] - left_margin))
+            prev = (page, top, end_page, bottom, None, None)
+            continue
+
         if kind == 'img':
             pic = b['picture']
             if pic['cover']:
@@ -431,7 +487,8 @@ def export_docx(doc, layout, blocks, out_path, font_dir):
             f'w:footer="{_tw(max(footer_dist, 0))}" w:gutter="0"/>{pg_num}</w:sectPr>')
     document = (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document {NS}>'
                 + (f'<w:background w:color="{layout.page_bg.lstrip("#")}"/>' if layout.page_bg != '#FFFFFF' else '') +
-                f'<w:body>{"".join(body)}{sect}</w:body></w:document>')
+                f'<w:body>{"".join(body)}{"<w:p/>" if body and body[-1].endswith("</w:tbl>") else ""}'
+                f'{sect}</w:body></w:document>')       # Word wants a paragraph after a last table
 
     font_files = [name for _, names in fonts for name in names]
     keys = ['{' + str(uuid.uuid4()).upper() + '}' for _ in font_files]

@@ -167,6 +167,13 @@ Unicode. Useful for text you copied out of a Bijoy-typed document.
   with `--keep-latin`.
 - **Layout measurement.** Body font size, left and right text edges, the page-number zone
   and pictures are measured from the PDF itself. Nothing is hard-coded for one book.
+- **Tables in PDFs.** A PDF has no tables, only text and drawn lines, so tables are
+  found from their lines: a table ruled all round with PyMuPDF's table finder (merged
+  cells included), and one drawn with horizontal rules only (a timeline, a comparison) as
+  a stack of equal rules, its columns where the rules' pieces meet. Underlines and a rule
+  under a heading are not taken for tables. The DOCX, EPUB and Markdown outputs then get
+  real tables, read cell by cell, instead of the cells' lines run together; the PDF output
+  keeps each page as it is.
 - **PDF rebuild.** Body text is rebuilt as justified paragraphs. Each block is fitted in
   Chrome to the same number of lines as its source, so text does not collide with
   headings or English lines. Page breaks are kept.

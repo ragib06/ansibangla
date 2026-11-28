@@ -46,13 +46,13 @@ def _merge_spans(spans):
     return out
 
 
-def read_lines(page):
-    """Text lines of a page, top to bottom, with their spans.
+def read_lines(page, clip=None):
+    """Text lines of a page (or of the rectangle clip on it), top to bottom, with their spans.
 
     PyMuPDF splits a justified line with wide word gaps into several fragments on one
     baseline; they are merged back into one line here."""
     raw = []
-    for block in page.get_text('dict')['blocks']:
+    for block in page.get_text('dict', clip=clip)['blocks']:
         for line in block.get('lines', []):
             spans = [s for s in line['spans'] if s['text'].strip() or s['text']]
             if not any(s['text'].strip() for s in spans):
