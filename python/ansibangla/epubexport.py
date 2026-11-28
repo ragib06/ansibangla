@@ -38,7 +38,7 @@ p.chapno { font-size: 1.12em; margin: 3em 0 0.3em; page-break-after: avoid; brea
 .latin { font-family: 'Times New Roman', 'Liberation Serif', serif; font-size: 0.87em; }
 .b { font-weight: bold; }
 .i { font-style: italic; }
-.spaced { letter-spacing: 0.35em; }
+.spaced { word-spacing: 0.3em; }
 figure { margin: 1em 0; text-align: center; page-break-inside: avoid; break-inside: avoid; }
 figure img { max-width: 100%%; border: 2px solid #000; box-sizing: border-box; }
 figure.cover img { border: 0; max-height: 100%%; }
@@ -215,12 +215,19 @@ def export_epub(doc, layout, blocks, out_path, font_dir, *, title=None):
             group = seq[start:k + 1]
             if book.chapters[-1]['parts'] or book.chapters[-1]['title']:
                 book.chapter()
-            book.add(book.marker(group[0]['page']) + _opening_html(group, layout))
+            book.chapters[-1].pop('toc', None)  # a heading's chapter is always listed
+            title_page = len(group) > 2
+            book.add(book.marker(group[0]['page']) + _opening_html(group, layout, title_page))
             if len(group) == 2:
                 chapter_title = f'{_heading_text(group[0])}: {_heading_text(b)}'
             else:                               # a title page: name it after its largest line
                 chapter_title = _heading_text(max(group, key=lambda g: g['lines'][0]['size']))
             book.chapters[-1]['title'] = chapter_title
+            if title_page:
+                # what follows (the copyright page, say) starts a page of its own, with no
+                # entry in the table of contents
+                book.chapter()
+                book.chapters[-1]['toc'] = False
         elif kind == 'c':
             if k + 1 < len(seq) and _leads(b, seq[k + 1]):
                 continue                        # written with the heading below it
@@ -308,10 +315,18 @@ def _joined_html(lines, layout):
     return ''.join(out)
 
 
-def _opening_html(group, layout):
+TITLE_PAGE_GAP = 1.0     # em: largest gap kept between the lines of a title page
+
+
+def _opening_html(group, layout, title_page=False):
     """A chapter opening: centred lines and headings at their source sizes relative to the
-    body text, with the source's spacing between them; the last one is the <h1>."""
+    body text, with the source's spacing between them; the last one is the <h1>.
+
+    A title page (title_page) keeps its lines on one screen: the printed page's large gaps
+    (several lines between the title, the translators and the editor) are cut to at most
+    TITLE_PAGE_GAP, and its largest line, the book's title, is the <h1>."""
     out, prev = [], None
+    head = max(range(len(group)), key=lambda n: group[n]['lines'][0]['size']) if title_page else len(group) - 1
     for n, blk in enumerate(group):
         line = blk['lines'][0]
         size = (line['mj_size'] or line['size']) * (layout.scale if line['mj_size'] else 1.0)
@@ -320,10 +335,11 @@ def _opening_html(group, layout):
         if prev is not None:                    # source gap beyond this line's own height
             gap = line['base'] - prev['base'] - 1.4 * size
             if gap > 0.15 * size:
-                style.append(f'margin-top:{gap / size:.2f}em')
+                em = gap / size
+                style.append(f'margin-top:{min(em, TITLE_PAGE_GAP) if title_page else em:.2f}em')
         css = '; '.join(style)
-        if n == len(group) - 1:
-            out.append(f'<h1 style="{css}">{_line_html(line, layout)}</h1>')
+        if n == head:
+            out.append(f'<h1 style="{css}">{_centred_html(blk, layout)}</h1>')
         else:
             cls = 'c chapno' if n == 0 else 'c'
             out.append(f'<p class="{cls}" style="{css}">{_centred_html(blk, layout)}</p>')
@@ -348,6 +364,9 @@ def _leads(block, heading):
 
 
 def _centred_html(block, layout):
+    """A centred line or heading. One set letter by letter in the source ("প্র থ ম  প র্ব")
+    is written as words: CSS letter spacing would break Bangla clusters apart in
+    Safari-based readers (Apple Books), detaching a reph from its letter."""
     line = block['lines'][0]
     if block.get('spaced'):
         return f'<span class="spaced">{_esc(despace(plain_line(line)))}</span>'

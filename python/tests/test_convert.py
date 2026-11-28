@@ -599,6 +599,39 @@ def test_printable_html_is_self_contained(src, tmp_path):
     assert any('ঀ' <= ch <= '৿' for ch in page)
 
 
+def test_epub_letter_spaced_heading_is_written_as_words():
+    """A heading set letter by letter in the PDF ("প্র থ ম  প র্ব") is written as words in
+    the e-book, the chapter's own heading too, and with no CSS letter spacing, which breaks
+    Bangla clusters apart (a detached reph) in Safari-based readers such as Apple Books."""
+    import types
+    from ansibangla.epubexport import CSS, _opening_html
+    line = dict(spans=[dict(font='SutonnyMJ', text='cÖ _ g  c e©', size=20.0)],
+                mj_size=20.0, size=20.0, base=100.0, x0=0, x1=50)
+    layout = types.SimpleNamespace(scale=0.9, body_size=11.0)
+    html = _opening_html([dict(kind='h', lines=[line], spaced=True)], layout)
+    assert re.sub(r'<[^>]+>', '', html) == 'প্রথম পর্ব'
+    assert 'letter-spacing' not in CSS
+
+
+def test_epub_title_page_fits_and_has_the_title_as_heading():
+    """A title page keeps its lines together (the printed page's large gaps are cut to
+    TITLE_PAGE_GAP, so it fits one screen) and its largest line is the <h1>."""
+    import types
+    from ansibangla.epubexport import TITLE_PAGE_GAP, _opening_html
+
+    def blk(text, size, base):
+        return dict(kind='h', spaced=False, lines=[dict(
+            spans=[dict(font='SutonnyMJ', text=text, size=size)], mj_size=size, size=size,
+            base=base, x0=0, x1=50)])
+    # author, title, subtitle, then the translator far down the printed page
+    group = [blk('BDfvj', 18, 100), blk('†mwcqy',  34, 160), blk('gvby‡li', 18, 200), blk('fvlvšÍi', 16, 420)]
+    layout = types.SimpleNamespace(scale=0.9, body_size=11.0)
+    html = _opening_html(group, layout, title_page=True)
+    gaps = [float(g) for g in re.findall(r'margin-top:([\d.]+)em', html)]
+    assert gaps and max(gaps) <= TITLE_PAGE_GAP
+    assert re.search(r'<h1[^>]*>.*?</h1>', html).group(0).count('font-size:3.00em') == 1   # the title
+
+
 def test_pdf_tables_found_ruled_and_rules_only():
     """Tables in a PDF: a ruled one (borders all round) with its cells, and one drawn with
     horizontal rules only (a timeline), its columns found from where its text starts. A
